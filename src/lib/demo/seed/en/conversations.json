@@ -1,0 +1,57 @@
+[
+  {
+    "id": "demo-conv-1",
+    "title": "Go escape analysis improvements",
+    "article_id": 1,
+    "article_title": "Allocation Optimizations in Go",
+    "article_url": "https://go.dev/blog/allocation-optimizations",
+    "article_og_image": null,
+    "first_user_message": "[{\"type\":\"text\",\"text\":\"Can you explain how the new escape analysis reduces heap allocations?\"}]",
+    "first_assistant_preview": "[{\"type\":\"text\",\"text\":\"The improved escape analysis in Go now tracks variable lifetimes more precisely. Previously, the compiler would conservatively allocate to the heap when it couldn't prove a variable didn't escape. The new analysis can identify more cases where variables are only used within their declaring function — even through closures and interface calls — allowing them to stay on the stack.\"}]",
+    "created_at": "2026-03-07T10:00:00.000Z",
+    "updated_at": "2026-03-07T10:05:00.000Z",
+    "message_count": 4,
+    "messages": [
+      { "role": "user", "content": "[{\"type\":\"text\",\"text\":\"Can you explain how the new escape analysis reduces heap allocations?\"}]" },
+      { "role": "assistant", "content": "[{\"type\":\"text\",\"text\":\"The improved escape analysis in Go now tracks variable lifetimes more precisely. Previously, the compiler would conservatively allocate to the heap when it couldn't prove a variable didn't escape. The new analysis can identify more cases where variables are only used within their declaring function — even through closures and interface calls — allowing them to stay on the stack.\\n\\nKey improvements:\\n- **Closure analysis**: Variables captured by closures that don't outlive the parent function are now stack-allocated\\n- **Interface devirtualization**: When the compiler can determine the concrete type behind an interface, it avoids heap-allocating the value\\n- **Inlining synergy**: Better inlining heuristics expose more opportunities for the escape analyzer\"}]" },
+      { "role": "user", "content": "[{\"type\":\"text\",\"text\":\"How can I check if my code benefits from this? Is there a way to see what gets allocated on the heap?\"}]" },
+      { "role": "assistant", "content": "[{\"type\":\"text\",\"text\":\"Yes! You can use the `-gcflags='-m'` flag to see escape analysis decisions:\\n\\n```bash\\ngo build -gcflags='-m' ./...\\n```\\n\\nThis prints lines like `moved to heap: x` for variables that escape. Use `-m -m` for more verbose output.\\n\\nYou can also use benchmarks with `-benchmem` to measure allocations before and after upgrading:\\n\\n```bash\\ngo test -bench=. -benchmem ./...\\n```\\n\\nCompare the `allocs/op` numbers between Go versions to see the concrete improvement in your codebase.\"}]" }
+    ]
+  },
+  {
+    "id": "demo-conv-2",
+    "title": "What's new in Go 1.26",
+    "article_id": 3,
+    "article_title": "Go 1.26 is Released",
+    "article_url": "https://go.dev/blog/go1.26",
+    "article_og_image": null,
+    "first_user_message": "[{\"type\":\"text\",\"text\":\"What are the biggest changes in Go 1.26 that I should know about?\"}]",
+    "first_assistant_preview": "[{\"type\":\"text\",\"text\":\"The highlights of Go 1.26 are:\\n\\n1. **Stable iterators**: Range-over-function iterators (introduced experimentally in 1.23) are now fully stable. You can write custom iterators that work with `for range`.\\n2. **Better error messages**: The compiler now provides more context in error messages, including suggestions for common mistakes.\\n3. **Faster builds**: Compilation is 8-12% faster thanks to improved parallelism in the compiler pipeline.\"}]",
+    "created_at": "2026-02-19T15:00:00.000Z",
+    "updated_at": "2026-02-19T15:10:00.000Z",
+    "message_count": 2,
+    "messages": [
+      { "role": "user", "content": "[{\"type\":\"text\",\"text\":\"What are the biggest changes in Go 1.26 that I should know about?\"}]" },
+      { "role": "assistant", "content": "[{\"type\":\"text\",\"text\":\"The highlights of Go 1.26 are:\\n\\n1. **Stable iterators**: Range-over-function iterators (introduced experimentally in 1.23) are now fully stable. You can write custom iterators that work with `for range`.\\n2. **Better error messages**: The compiler now provides more context in error messages, including suggestions for common mistakes.\\n3. **Faster builds**: Compilation is 8-12% faster thanks to improved parallelism in the compiler pipeline.\\n\\nThere are also smaller but useful additions: the `testing/synctest` package for testing concurrent code with fake time, and improvements to `go vet` that catch more common bugs at build time.\\n\\nIf you're upgrading from 1.25, it should be a smooth transition — no breaking changes.\"}]" }
+    ]
+  },
+  {
+    "id": "demo-conv-3",
+    "title": "Post-quantum cryptography migration",
+    "article_id": 13,
+    "article_title": "Post-Quantum Cryptography at Cloudflare",
+    "article_url": "https://blog.cloudflare.com/post-quantum-cryptography",
+    "article_og_image": null,
+    "first_user_message": "[{\"type\":\"text\",\"text\":\"Why should I care about post-quantum cryptography now? Quantum computers aren't here yet.\"}]",
+    "first_assistant_preview": "[{\"type\":\"text\",\"text\":\"Great question. The urgency comes from a threat model called 'harvest now, decrypt later'. Adversaries can record encrypted traffic today and store it until quantum computers become powerful enough to break current encryption.\"}]",
+    "created_at": "2026-02-01T09:00:00.000Z",
+    "updated_at": "2026-02-01T09:12:00.000Z",
+    "message_count": 4,
+    "messages": [
+      { "role": "user", "content": "[{\"type\":\"text\",\"text\":\"Why should I care about post-quantum cryptography now? Quantum computers aren't here yet.\"}]" },
+      { "role": "assistant", "content": "[{\"type\":\"text\",\"text\":\"Great question. The urgency comes from a threat model called 'harvest now, decrypt later'. Adversaries can record encrypted traffic today and store it until quantum computers become powerful enough to break current encryption.\\n\\nFor data that needs to remain confidential for 10+ years (medical records, state secrets, financial data), the migration needs to start now. NIST has already finalized post-quantum standards (ML-KEM, ML-DSA), and major browsers and CDNs like Cloudflare are deploying them.\\n\\nThe practical impact for most developers:\\n- TLS libraries will handle the transition transparently\\n- Key sizes and handshake times increase slightly\\n- You should ensure your infrastructure supports the new algorithms\"}]" },
+      { "role": "user", "content": "[{\"type\":\"text\",\"text\":\"What algorithms does Cloudflare use and how much overhead do they add?\"}]" },
+      { "role": "assistant", "content": "[{\"type\":\"text\",\"text\":\"Cloudflare uses **ML-KEM-768** (formerly Kyber) for key encapsulation in TLS 1.3 handshakes. According to the article, the overhead is minimal in practice:\\n\\n- **Key size**: ML-KEM public keys are ~1,184 bytes vs ~32 bytes for X25519\\n- **Handshake latency**: ~0.5ms additional in the hybrid X25519+ML-KEM mode\\n- **CPU overhead**: Negligible — ML-KEM operations are faster than RSA\\n\\nThey run a hybrid approach: both classical (X25519) and post-quantum (ML-KEM) key exchanges happen simultaneously. This means if either algorithm is broken, the other still provides security. Most users won't notice any difference.\"}]" }
+    ]
+  }
+]
