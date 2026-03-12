@@ -7,7 +7,7 @@ function buildMeiliDoc(id: number): MeiliArticleDoc | null {
   const row = getDb().prepare(`
     SELECT id, feed_id, category_id, title,
            COALESCE(full_text, '') AS full_text,
-           COALESCE(full_text_ja, '') AS full_text_ja,
+           COALESCE(full_text_translated, '') AS full_text_translated,
            lang,
            COALESCE(CAST(strftime('%s', published_at) AS INTEGER), 0) AS published_at,
            COALESCE(score, 0) AS score
@@ -30,7 +30,7 @@ function scoreExpr(prefix: string, opts?: { searchBoost?: boolean }): string {
   const engagement = `(
     (CASE WHEN ${p}liked_at IS NOT NULL THEN 10 ELSE 0 END)
     + (CASE WHEN ${p}bookmarked_at IS NOT NULL THEN 5 ELSE 0 END)
-    + (CASE WHEN ${p}full_text_ja IS NOT NULL THEN 3 ELSE 0 END)
+    + (CASE WHEN ${p}full_text_translated IS NOT NULL THEN 3 ELSE 0 END)
     + (CASE WHEN ${p}read_at IS NOT NULL THEN 2 ELSE 0 END)
   )`
   const decay = `(1.0 / (1.0 + (julianday('now') - julianday(
@@ -171,7 +171,7 @@ export function getArticleByUrl(url: string): ArticleDetail | undefined {
   return getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
            a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
-           a.full_text, a.full_text_ja, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at
     FROM articles a
     JOIN feeds f ON a.feed_id = f.id
@@ -183,7 +183,7 @@ export function getArticleById(id: number): ArticleDetail | undefined {
   return getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
            a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
-           a.full_text, a.full_text_ja, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at
     FROM articles a
     JOIN feeds f ON a.feed_id = f.id
@@ -290,15 +290,16 @@ export function insertArticle(data: {
   published_at: string | null
   lang?: string | null
   full_text?: string | null
-  full_text_ja?: string | null
+  full_text_translated?: string | null
+  translated_lang?: string | null
   summary?: string | null
   excerpt?: string | null
   og_image?: string | null
   last_error?: string | null
 }): number {
   const info = runNamed(`
-    INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_ja, summary, excerpt, og_image, last_error)
-    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_ja, @summary, @excerpt, @og_image, @last_error)
+    INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
+    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
   `, {
     feed_id: data.feed_id,
     title: data.title,
@@ -306,7 +307,8 @@ export function insertArticle(data: {
     published_at: data.published_at,
     lang: data.lang ?? null,
     full_text: data.full_text ?? null,
-    full_text_ja: data.full_text_ja ?? null,
+    full_text_translated: data.full_text_translated ?? null,
+    translated_lang: data.translated_lang ?? null,
     summary: data.summary ?? null,
     excerpt: data.excerpt ?? null,
     og_image: data.og_image ?? null,
@@ -323,7 +325,8 @@ export function updateArticleContent(
   data: {
     lang?: string | null
     full_text?: string | null
-    full_text_ja?: string | null
+    full_text_translated?: string | null
+    translated_lang?: string | null
     summary?: string | null
     excerpt?: string | null
     og_image?: string | null
@@ -359,7 +362,7 @@ export function getRetryArticles(): Article[] {
     SELECT * FROM articles
     WHERE last_error IS NOT NULL
       AND (full_text IS NULL OR summary IS NULL
-           OR (lang != 'ja' AND full_text_ja IS NULL))
+           OR full_text_translated IS NULL)
   `).all() as Article[]
 }
 
@@ -469,7 +472,7 @@ export function searchArticles(opts: {
 
   if (hasQuery) {
     const likePattern = `%${opts.query}%`
-    conditions.push('(a.title LIKE @likeQuery OR a.full_text LIKE @likeQuery OR a.full_text_ja LIKE @likeQuery)')
+    conditions.push('(a.title LIKE @likeQuery OR a.full_text LIKE @likeQuery OR a.full_text_translated LIKE @likeQuery)')
     params.likeQuery = likePattern
   }
 

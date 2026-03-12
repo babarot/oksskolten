@@ -29,7 +29,7 @@ interface SeedArticle {
   title: string
   url: string
   full_text: string | null
-  full_text_ja: string | null
+  full_text_translated: string | null
   summary: string | null
   summary_ja: string | null
   excerpt: string | null

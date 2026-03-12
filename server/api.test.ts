@@ -12,7 +12,7 @@ vi.mock('./fetcher.js', async () => {
     discoverRssUrl: vi.fn().mockResolvedValue({ rssUrl: 'https://example.com/rss', title: 'Example' }),
     summarizeArticle: vi.fn().mockResolvedValue({ summary: 'summary text', inputTokens: 10, outputTokens: 5 }),
     streamSummarizeArticle: vi.fn(),
-    translateArticle: vi.fn().mockResolvedValue({ fullTextJa: '翻訳テキスト', inputTokens: 10, outputTokens: 5 }),
+    translateArticle: vi.fn().mockResolvedValue({ fullTextTranslated: '翻訳テキスト', inputTokens: 10, outputTokens: 5 }),
     streamTranslateArticle: vi.fn(),
     fetchProgress: new EventEmitter(),
     getFeedState: vi.fn().mockReturnValue(null),

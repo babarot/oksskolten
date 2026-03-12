@@ -21,7 +21,7 @@ export interface MeiliArticleDoc {
   category_id: number | null
   title: string
   full_text: string
-  full_text_ja: string
+  full_text_translated: string
   lang: string | null
   published_at: number // Unix timestamp (seconds) for numeric filtering
   score: number

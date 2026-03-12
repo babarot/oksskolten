@@ -39,14 +39,20 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   const { data: article, error, mutate } = useSWR<ArticleDetailData>(articleKey, fetcher)
   const { mutate: globalMutate } = useSWRConfig()
 
-  const isJa = article?.lang === 'ja'
+  const isUserLang = article?.lang === locale
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   const articleRef = useRef<HTMLElement>(null)
 
   const metrics = useMetrics()
   const { summary, summarizing, streamingText, handleSummarize, summaryHtml, streamingHtml, error: summarizeError } = useSummarize(article, metrics)
-  const { viewMode, setViewMode, translating, translatingText, fullTextJa, handleTranslate, translatingHtml, error: translateError } = useTranslate(article, metrics)
+  // Only pass translation to the hook if it matches the current locale; stale translations are treated as absent
+  const isTranslationCurrent = article?.translated_lang === locale
+  const translateInput = useMemo(() =>
+    article ? { id: article.id, full_text_translated: isTranslationCurrent ? article.full_text_translated : null } : undefined,
+    [article, isTranslationCurrent],
+  )
+  const { viewMode, setViewMode, translating, translatingText, fullTextTranslated, handleTranslate, translatingHtml, error: translateError } = useTranslate(translateInput, metrics)
   const {
     isBookmarked, isLiked, archivingImages, deleteConfirmOpen, setDeleteConfirmOpen,
     toggleBookmark, toggleLike, handleArchiveImages, handleDelete,
@@ -55,10 +61,10 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
 
   // Sync translation/summary back into SWR cache so it persists across navigations
   useEffect(() => {
-    if (fullTextJa && article && article.full_text_ja !== fullTextJa) {
-      void mutate({ ...article, full_text_ja: fullTextJa }, false)
+    if (fullTextTranslated && article && article.full_text_translated !== fullTextTranslated) {
+      void mutate({ ...article, full_text_translated: fullTextTranslated }, false)
     }
-  }, [fullTextJa]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fullTextTranslated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (summary && article && article.summary !== summary) {
@@ -88,8 +94,8 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   const content = useMemo(() => {
     if (!article) return ''
     let md = ''
-    if (viewMode === 'ja' && !isJa) {
-      md = fullTextJa || ''
+    if (viewMode === 'translated' && !isUserLang) {
+      md = fullTextTranslated || ''
     } else {
       md = article.full_text || ''
     }
@@ -97,7 +103,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     md = fixLegacyMarkdown(md)
     const html = markedInstance.parse(md) as string
     return sanitizeHtml(html)
-  }, [article, viewMode, isJa, fullTextJa, t])
+  }, [article, viewMode, isUserLang, fullTextTranslated, t])
 
   const { rewrittenHtml: displayContent } = useRewriteInternalLinks(
     content,
@@ -170,7 +176,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     )
   }
 
-  const hasTranslation = !!fullTextJa
+  const hasTranslation = !!fullTextTranslated
 
   return (
     <>
@@ -187,7 +193,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
         chatPosition={chatPosition}
         chatOpen={chat.open}
         onChatToggle={chat.toggle}
-        isJa={isJa}
+        isUserLang={isUserLang}
         hasTranslation={hasTranslation}
         translating={translating}
         onTranslate={handleTranslate}
@@ -242,10 +248,10 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       )}
 
       {/* Language banner */}
-      {!isJa && hasTranslation && (
+      {!isUserLang && hasTranslation && (
         <ArticleTranslationBanner
           viewMode={viewMode}
-          onToggle={() => setViewMode(viewMode === 'ja' ? 'original' : 'ja')}
+          onToggle={() => setViewMode(viewMode === 'translated' ? 'original' : 'translated')}
         />
       )}
 

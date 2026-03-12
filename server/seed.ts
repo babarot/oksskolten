@@ -82,7 +82,7 @@ export function seedDevData() {
     // Articles — use mapped feed IDs
     const dateKeys = ['published_at', 'seen_at', 'read_at', 'bookmarked_at', 'liked_at', 'fetched_at', 'created_at']
     const insertArticle = db.prepare(
-      'INSERT OR IGNORE INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_ja, summary, excerpt, og_image, seen_at, read_at, bookmarked_at, liked_at, fetched_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_translated, summary, excerpt, og_image, seen_at, read_at, bookmarked_at, liked_at, fetched_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     for (const a of articlesJson) {
       const dbFeedId = feedIdMap.get(a.feed_id)
@@ -97,7 +97,7 @@ export function seedDevData() {
 
       insertArticle.run(
         dbFeedId, dbCatId, a.title, a.url,
-        a.published_at, a.lang, a.full_text, a.full_text_ja,
+        a.published_at, a.lang, a.full_text, a.full_text_translated,
         a.summary, a.excerpt, a.og_image ?? null,
         a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
         a.fetched_at, a.created_at

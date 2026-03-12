@@ -143,7 +143,7 @@ export function updateFeed(
     const docs = getDb().prepare(`
       SELECT id, feed_id, category_id, title,
              COALESCE(full_text, '') AS full_text,
-             COALESCE(full_text_ja, '') AS full_text_ja,
+             COALESCE(full_text_translated, '') AS full_text_translated,
              lang,
              COALESCE(CAST(strftime('%s', published_at) AS INTEGER), 0) AS published_at,
              COALESCE(score, 0) AS score
@@ -168,7 +168,7 @@ export function bulkMoveFeedsToCategory(feedIds: number[], categoryId: number | 
     const docs = getDb().prepare(`
       SELECT id, feed_id, category_id, title,
              COALESCE(full_text, '') AS full_text,
-             COALESCE(full_text_ja, '') AS full_text_ja,
+             COALESCE(full_text_translated, '') AS full_text_translated,
              lang,
              COALESCE(CAST(strftime('%s', published_at) AS INTEGER), 0) AS published_at,
              COALESCE(score, 0) AS score

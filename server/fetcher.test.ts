@@ -407,14 +407,14 @@ describe('translateArticle', () => {
     translateArticle = mod.translateArticle
   })
 
-  it('returns fullTextJa and token usage', async () => {
+  it('returns fullTextTranslated and token usage', async () => {
     mockMessagesCreate.mockResolvedValue({
       content: [{ type: 'text', text: '翻訳されたテキスト' }],
       usage: { input_tokens: 200, output_tokens: 150 },
     })
 
     const result = await translateArticle('English text')
-    expect(result.fullTextJa).toBe('翻訳されたテキスト')
+    expect(result.fullTextTranslated).toBe('翻訳されたテキスト')
     expect(result.inputTokens).toBe(200)
     expect(result.outputTokens).toBe(150)
   })
@@ -2036,7 +2036,7 @@ describe('streamTranslateArticle', () => {
 
     const result = await streamTranslateArticle('English text', textHandler)
 
-    expect(result.fullTextJa).toBe('翻訳テキスト')
+    expect(result.fullTextTranslated).toBe('翻訳テキスト')
     expect(result.inputTokens).toBe(200)
     expect(result.outputTokens).toBe(150)
 

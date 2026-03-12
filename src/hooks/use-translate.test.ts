@@ -35,26 +35,26 @@ describe('useTranslate', () => {
     mockStreamPost.mockReset()
   })
 
-  it('initializes fullTextJa from article.full_text_ja', () => {
+  it('initializes fullTextTranslated from article.full_text_translated', () => {
     const metrics = mockMetrics()
     const { result } = renderHook(() =>
-      useTranslate({ id: 1, full_text_ja: '翻訳済みテキスト' }, metrics),
+      useTranslate({ id: 1, full_text_translated: '翻訳済みテキスト' }, metrics),
     )
-    expect(result.current.fullTextJa).toBe('翻訳済みテキスト')
+    expect(result.current.fullTextTranslated).toBe('翻訳済みテキスト')
   })
 
   it('sets viewMode to ja when translation exists', () => {
     const metrics = mockMetrics()
     const { result } = renderHook(() =>
-      useTranslate({ id: 1, full_text_ja: '翻訳' }, metrics),
+      useTranslate({ id: 1, full_text_translated: '翻訳' }, metrics),
     )
-    expect(result.current.viewMode).toBe('ja')
+    expect(result.current.viewMode).toBe('translated')
   })
 
   it('defaults viewMode to original when no translation', () => {
     const metrics = mockMetrics()
     const { result } = renderHook(() =>
-      useTranslate({ id: 1, full_text_ja: null }, metrics),
+      useTranslate({ id: 1, full_text_translated: null }, metrics),
     )
     expect(result.current.viewMode).toBe('original')
   })
@@ -66,7 +66,7 @@ describe('useTranslate', () => {
     })
 
     const metrics = mockMetrics()
-    const article = { id: 10, full_text_ja: null }
+    const article = { id: 10, full_text_translated: null }
     const { result } = renderHook(() => useTranslate(article, metrics))
 
     await act(async () => {
@@ -79,29 +79,29 @@ describe('useTranslate', () => {
     )
   })
 
-  it('sets fullTextJa and viewMode=ja on completion', async () => {
+  it('sets fullTextTranslated and viewMode=ja on completion', async () => {
     mockStreamPost.mockImplementation((_url: string, onDelta: (text: string) => void) => {
       onDelta('完成した翻訳')
       return Promise.resolve({ usage: { input_tokens: 100, output_tokens: 80 } })
     })
 
     const metrics = mockMetrics()
-    const article = { id: 1, full_text_ja: null }
+    const article = { id: 1, full_text_translated: null }
     const { result } = renderHook(() => useTranslate(article, metrics))
 
     await act(async () => {
       await result.current.handleTranslate()
     })
 
-    expect(result.current.fullTextJa).toBe('完成した翻訳')
-    expect(result.current.viewMode).toBe('ja')
+    expect(result.current.fullTextTranslated).toBe('完成した翻訳')
+    expect(result.current.viewMode).toBe('translated')
   })
 
   it('reports metrics when input_tokens > 0', async () => {
     mockStreamPost.mockResolvedValue({ usage: { input_tokens: 300, output_tokens: 200 } })
 
     const metrics = mockMetrics()
-    const article = { id: 1, full_text_ja: null }
+    const article = { id: 1, full_text_translated: null }
     const { result } = renderHook(() => useTranslate(article, metrics))
 
     await act(async () => {
@@ -120,7 +120,7 @@ describe('useTranslate', () => {
     mockStreamPost.mockResolvedValue({ usage: { input_tokens: 0, output_tokens: 0 } })
 
     const metrics = mockMetrics()
-    const article = { id: 1, full_text_ja: null }
+    const article = { id: 1, full_text_translated: null }
     const { result } = renderHook(() => useTranslate(article, metrics))
 
     await act(async () => {
@@ -134,7 +134,7 @@ describe('useTranslate', () => {
     mockStreamPost.mockRejectedValue(new Error('Network error'))
 
     const metrics = mockMetrics()
-    const article = { id: 1, full_text_ja: null }
+    const article = { id: 1, full_text_translated: null }
     const { result } = renderHook(() => useTranslate(article, metrics))
 
     await act(async () => {

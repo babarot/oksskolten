@@ -10,7 +10,7 @@ interface ArticleToolbarProps {
   chatPosition: string
   chatOpen: boolean
   onChatToggle: () => void
-  isJa: boolean
+  isUserLang: boolean
   hasTranslation: boolean
   translating: boolean
   onTranslate: () => void
@@ -31,7 +31,7 @@ export function ArticleToolbar({
   chatPosition,
   chatOpen,
   onChatToggle,
-  isJa,
+  isUserLang,
   hasTranslation,
   translating,
   onTranslate,
@@ -74,7 +74,7 @@ export function ArticleToolbar({
       {chatPosition === 'inline' && (
         <ChatInlineTrigger active={chatOpen} onToggle={onChatToggle} />
       )}
-      {!isJa && !hasTranslation && !translating && (
+      {!isUserLang && !hasTranslation && !translating && (
         <ActionChip onClick={onTranslate}>
           <Languages className="w-3.5 h-3.5" />
           {t('article.translate')}

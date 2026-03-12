@@ -123,7 +123,7 @@ export async function streamSummarizeArticle(
   return { summary: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
 }
 
-export async function translateArticle(fullText: string): Promise<{ fullTextJa: string } & AiTextResult> {
+export async function translateArticle(fullText: string): Promise<{ fullTextTranslated: string } & AiTextResult> {
   const provider = getSetting('translate.provider') || TASK_DEFAULTS.translate.provider
   if (provider === 'google-translate') {
     return runGoogleTranslate(fullText)
@@ -132,32 +132,36 @@ export async function translateArticle(fullText: string): Promise<{ fullTextJa: 
     return runDeepl(fullText)
   }
   const r = await runAiTask(translateConfig, fullText)
-  return { fullTextJa: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
+  return { fullTextTranslated: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
 }
 
 export async function streamTranslateArticle(
   fullText: string,
   onText: (delta: string) => void,
-): Promise<{ fullTextJa: string } & AiTextResult> {
+): Promise<{ fullTextTranslated: string } & AiTextResult> {
   const provider = getSetting('translate.provider') || TASK_DEFAULTS.translate.provider
   if (provider === 'google-translate') {
     const result = await runGoogleTranslate(fullText)
-    onText(result.fullTextJa)
+    onText(result.fullTextTranslated)
     return result
   }
   if (provider === 'deepl') {
     const result = await runDeepl(fullText)
-    onText(result.fullTextJa)
+    onText(result.fullTextTranslated)
     return result
   }
   const r = await runAiTask(translateConfig, fullText, onText)
-  return { fullTextJa: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
+  return { fullTextTranslated: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
 }
 
-async function runGoogleTranslate(fullText: string): Promise<{ fullTextJa: string } & AiTextResult> {
-  const result = await googleTranslate(fullText, 'ja')
+function getTargetLang(): string {
+  return getSetting('general.language') || DEFAULT_LANGUAGE
+}
+
+async function runGoogleTranslate(fullText: string): Promise<{ fullTextTranslated: string } & AiTextResult> {
+  const result = await googleTranslate(fullText, getTargetLang())
   return {
-    fullTextJa: result.translatedText,
+    fullTextTranslated: result.translatedText,
     inputTokens: result.characters,
     outputTokens: result.translatedText.length,
     billingMode: 'google-translate',
@@ -166,10 +170,10 @@ async function runGoogleTranslate(fullText: string): Promise<{ fullTextJa: strin
   }
 }
 
-async function runDeepl(fullText: string): Promise<{ fullTextJa: string } & AiTextResult> {
-  const result = await deeplTranslate(fullText, 'ja')
+async function runDeepl(fullText: string): Promise<{ fullTextTranslated: string } & AiTextResult> {
+  const result = await deeplTranslate(fullText, getTargetLang())
   return {
-    fullTextJa: result.translatedText,
+    fullTextTranslated: result.translatedText,
     inputTokens: result.characters,
     outputTokens: result.translatedText.length,
     billingMode: 'deepl',

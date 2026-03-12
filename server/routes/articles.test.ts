@@ -21,7 +21,7 @@ vi.mock('../fetcher.js', async () => {
     discoverRssUrl: vi.fn().mockResolvedValue({ rssUrl: null, title: null }),
     summarizeArticle: vi.fn().mockResolvedValue({ summary: 'summary text', inputTokens: 10, outputTokens: 5, billingMode: 'standard', model: 'haiku' }),
     streamSummarizeArticle: (...args: unknown[]) => mockStreamSummarize(...args),
-    translateArticle: vi.fn().mockResolvedValue({ fullTextJa: '翻訳テキスト', inputTokens: 10, outputTokens: 5, billingMode: 'standard', model: 'sonnet' }),
+    translateArticle: vi.fn().mockResolvedValue({ fullTextTranslated: '翻訳テキスト', inputTokens: 10, outputTokens: 5, billingMode: 'standard', model: 'sonnet' }),
     streamTranslateArticle: (...args: unknown[]) => mockStreamTranslate(...args),
     fetchProgress: new EventEmitter(),
     getFeedState: vi.fn(),
@@ -151,7 +151,7 @@ describe('POST /api/articles/:id/summarize?stream=1', () => {
 describe('POST /api/articles/:id/translate', () => {
   it('returns cached translation', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'English text', full_text_ja: '日本語テキスト' })
+    const artId = seedArticle(feed.id, { full_text: 'English text', full_text_translated: '日本語テキスト', translated_lang: 'en' })
 
     const res = await app.inject({
       method: 'POST',
@@ -165,9 +165,10 @@ describe('POST /api/articles/:id/translate', () => {
     expect(res.json().cached).toBe(true)
   })
 
-  it('returns 400 when article is already Japanese', async () => {
+  it('returns 400 when article is already in user language', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: '日本語の記事', lang: 'ja' })
+    // Default user language is 'en', so an English article should be rejected
+    const artId = seedArticle(feed.id, { full_text: 'English article', lang: 'en' })
 
     const res = await app.inject({
       method: 'POST',
@@ -177,7 +178,7 @@ describe('POST /api/articles/:id/translate', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    expect(res.json().error).toMatch(/Japanese/i)
+    expect(res.json().error).toMatch(/already in en/)
   })
 
   it('returns 400 when no full_text', async () => {
@@ -214,12 +215,12 @@ describe('POST /api/articles/:id/translate', () => {
 describe('POST /api/articles/:id/translate?stream=1', () => {
   it('returns SSE stream with deltas', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'English content', lang: 'en' })
+    const artId = seedArticle(feed.id, { full_text: 'Contenu en français', lang: 'fr' })
 
     mockStreamTranslate.mockImplementation(async (_text: string, onDelta: (d: string) => void) => {
       onDelta('翻訳')
       onDelta('テキスト')
-      return { fullTextJa: '翻訳テキスト', inputTokens: 20, outputTokens: 15, billingMode: 'standard', model: 'sonnet' }
+      return { fullTextTranslated: '翻訳テキスト', inputTokens: 20, outputTokens: 15, billingMode: 'standard', model: 'sonnet' }
     })
 
     const res = await app.inject({
@@ -247,7 +248,7 @@ describe('POST /api/articles/:id/translate?stream=1', () => {
 
   it('handles streaming translate error', async () => {
     const feed = seedFeed()
-    const artId = seedArticle(feed.id, { full_text: 'Content', lang: 'en' })
+    const artId = seedArticle(feed.id, { full_text: 'Contenu', lang: 'fr' })
 
     mockStreamTranslate.mockRejectedValue(new Error('API error'))
 

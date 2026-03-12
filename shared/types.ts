@@ -45,7 +45,8 @@ export interface Article {
   published_at: string | null
   lang: string | null
   full_text: string | null
-  full_text_ja: string | null
+  full_text_translated: string | null
+  translated_lang: string | null
   summary: string | null
   og_image: string | null
   last_error: string | null
@@ -77,7 +78,8 @@ export interface ArticleListItem {
 
 export interface ArticleDetail extends ArticleListItem {
   full_text: string | null
-  full_text_ja: string | null
+  full_text_translated: string | null
+  translated_lang: string | null
   images_archived_at: string | null
   feed_type: 'rss' | 'clip'
   imageArchivingEnabled: boolean

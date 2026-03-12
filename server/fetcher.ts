@@ -102,7 +102,7 @@ async function processArticle(task: ArticleTask): Promise<void> {
         published_at: task.published_at,
         lang: effectiveLang,
         full_text: fullText,
-        full_text_ja: null,
+        full_text_translated: null,
         summary: null,
         excerpt,
         og_image: ogImage,

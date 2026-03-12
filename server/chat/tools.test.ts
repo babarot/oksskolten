@@ -17,7 +17,7 @@ vi.mock('../fetcher.js', () => ({
     outputTokens: 50,
   }),
   translateArticle: vi.fn().mockResolvedValue({
-    fullTextJa: 'モック翻訳テキスト',
+    fullTextTranslated: 'モック翻訳テキスト',
     inputTokens: 200,
     outputTokens: 150,
   }),
@@ -310,27 +310,28 @@ describe('translate_article', () => {
   it('returns cached translation if available', async () => {
     const feed = seedFeed()
     const id = seedArticle(feed.id, { full_text: 'text', lang: 'en' })
-    updateArticleContent(id, { full_text_ja: 'Existing translation' })
+    updateArticleContent(id, { full_text_translated: 'Existing translation', translated_lang: 'en' })
 
     const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
-    expect(result.full_text_ja).toBe('Existing translation')
+    expect(result.full_text_translated).toBe('Existing translation')
     expect(result.cached).toBe(true)
   })
 
   it('generates translation when not cached', async () => {
     const feed = seedFeed()
-    const id = seedArticle(feed.id, { full_text: 'English article', lang: 'en' })
+    const id = seedArticle(feed.id, { full_text: 'Artículo en español', lang: 'es' })
 
     const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
-    expect(result.full_text_ja).toBe('モック翻訳テキスト')
+    expect(result.full_text_translated).toBe('モック翻訳テキスト')
   })
 
-  it('returns error for Japanese articles', async () => {
+  it('returns error when article is already in user language', async () => {
     const feed = seedFeed()
-    const id = seedArticle(feed.id, { full_text: 'Japanese text', lang: 'ja' })
+    // Default user language is 'en'
+    const id = seedArticle(feed.id, { full_text: 'English text', lang: 'en' })
 
     const result = JSON.parse(await executeTool('translate_article', { article_id: id }))
-    expect(result.error).toBe('Article is already in Japanese')
+    expect(result.error).toBe('Article is already in en')
   })
 })
 

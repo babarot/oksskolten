@@ -179,7 +179,7 @@ describe('streamSummarizeArticle', () => {
 // translateArticle
 // ---------------------------------------------------------------------------
 describe('translateArticle', () => {
-  it('returns fullTextJa with token usage', async () => {
+  it('returns fullTextTranslated with token usage', async () => {
     mockCreateMessage.mockResolvedValue({
       text: '翻訳されたテキスト',
       inputTokens: 200,
@@ -188,7 +188,7 @@ describe('translateArticle', () => {
 
     const result = await translateArticle('English article text')
 
-    expect(result.fullTextJa).toBe('翻訳されたテキスト')
+    expect(result.fullTextTranslated).toBe('翻訳されたテキスト')
     expect(result.inputTokens).toBe(200)
     expect(result.outputTokens).toBe(180)
     expect(result.billingMode).toBe('anthropic')
@@ -226,13 +226,13 @@ describe('translateArticle', () => {
 // streamTranslateArticle
 // ---------------------------------------------------------------------------
 describe('streamTranslateArticle', () => {
-  it('uses streamMessage and returns fullTextJa', async () => {
+  it('uses streamMessage and returns fullTextTranslated', async () => {
     mockStreamMessage.mockResolvedValue({ text: 'ストリーム翻訳', inputTokens: 15, outputTokens: 12 })
 
     const deltas: string[] = []
     const result = await streamTranslateArticle('text', (d) => deltas.push(d))
 
-    expect(result.fullTextJa).toBe('ストリーム翻訳')
+    expect(result.fullTextTranslated).toBe('ストリーム翻訳')
     expect(mockStreamMessage).toHaveBeenCalled()
     expect(mockCreateMessage).not.toHaveBeenCalled()
   })

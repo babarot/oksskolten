@@ -3,26 +3,26 @@ import { useStreamingAI } from './use-streaming-ai'
 import type { useMetrics } from './use-metrics'
 import type { Article } from '../../shared/types'
 
-type ViewMode = 'ja' | 'original'
+type ViewMode = 'translated' | 'original'
 
 const STREAMING_OPTIONS = {
   endpoint: (id: number) => `/api/articles/${id}/translate?stream=1`,
 } as const
 
 export function useTranslate(
-  article: Pick<Article, 'id' | 'full_text_ja'> | undefined,
+  article: Pick<Article, 'id' | 'full_text_translated'> | undefined,
   metrics: ReturnType<typeof useMetrics>,
 ) {
   const [viewMode, setViewMode] = useState<ViewMode>('original')
-  const [fullTextJa, setFullTextJa] = useState<string | null>(null)
+  const [fullTextTranslated, setFullTextTranslated] = useState<string | null>(null)
 
   const initializedIdRef = useRef<number | null>(null)
   useEffect(() => {
     if (article) {
-      setFullTextJa(article.full_text_ja)
+      setFullTextTranslated(article.full_text_translated)
       if (initializedIdRef.current !== article.id) {
         initializedIdRef.current = article.id
-        setViewMode(article.full_text_ja ? 'ja' : 'original')
+        setViewMode(article.full_text_translated ? 'translated' : 'original')
       }
     }
   }, [article])
@@ -30,8 +30,8 @@ export function useTranslate(
   const options = useMemo(() => ({
     ...STREAMING_OPTIONS,
     onComplete: (text: string) => {
-      setFullTextJa(text)
-      setViewMode('ja')
+      setFullTextTranslated(text)
+      setViewMode('translated')
     },
   }), [])
 
@@ -40,5 +40,5 @@ export function useTranslate(
 
   const handleTranslate = useCallback(() => run(), [run])
 
-  return { viewMode, setViewMode, translating, translatingText, fullTextJa, handleTranslate, translatingHtml, error }
+  return { viewMode, setViewMode, translating, translatingText, fullTextTranslated, handleTranslate, translatingHtml, error }
 }

@@ -31,6 +31,7 @@ import { fetchFullText } from '../fetcher/content.js'
 import { detectLanguage } from '../fetcher/ai.js'
 import { archiveArticleImages, isImageArchivingEnabled, deleteArticleImages } from '../fetcher/article-images.js'
 import { getSetting } from '../db/settings.js'
+import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import { NumericIdParams, parseOrBadRequest } from '../lib/validation.js'
@@ -313,7 +314,7 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
         const movedDoc = getDb().prepare(`
           SELECT id, feed_id, category_id, title,
                  COALESCE(full_text, '') AS full_text,
-                 COALESCE(full_text_ja, '') AS full_text_ja,
+                 COALESCE(full_text_translated, '') AS full_text_translated,
                  lang,
                  COALESCE(CAST(strftime('%s', published_at) AS INTEGER), 0) AS published_at,
                  COALESCE(score, 0) AS score
@@ -472,18 +473,25 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
     '/api/articles/:id/translate',
     { preHandler: [requireJson] },
     createAiHandler({
-      getCached: (article) => article.full_text_ja,
-      validate: (article) => article.lang === 'ja' ? 'Article is already in Japanese' : null,
+      getCached: (article) => {
+        const userLang = getSetting('general.language') || DEFAULT_LANGUAGE
+        return article.translated_lang === userLang ? article.full_text_translated : null
+      },
+      validate: (article) => {
+        const userLang = getSetting('general.language') || DEFAULT_LANGUAGE
+        return article.lang === userLang ? `Article is already in ${userLang}` : null
+      },
       streamFn: async (fullText, onDelta) => {
         const r = await streamTranslateArticle(fullText, onDelta)
-        return { text: r.fullTextJa, ...r }
+        return { text: r.fullTextTranslated, ...r }
       },
       nonStreamFn: async (fullText) => {
         const r = await translateArticle(fullText)
-        return { text: r.fullTextJa, ...r }
+        return { text: r.fullTextTranslated, ...r }
       },
       applyResult: (articleId, text) => {
-        updateArticleContent(articleId, { full_text_ja: text })
+        const userLang = getSetting('general.language') || DEFAULT_LANGUAGE
+        updateArticleContent(articleId, { full_text_translated: text, translated_lang: userLang })
         updateScore(articleId)
       },
       errorMessage: 'Translation failed',

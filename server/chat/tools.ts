@@ -18,6 +18,8 @@ import {
 import { buildMeiliFilter, meiliSearch, meiliSearchWithPagination } from '../search/client.js'
 import { isSearchReady } from '../search/sync.js'
 import { summarizeArticle, translateArticle } from '../fetcher.js'
+import { getSetting } from '../db/settings.js'
+import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 import { articleUrlToPath } from '../../shared/url.js'
 
 /** Convert a UTC datetime string from SQLite to JST (Asia/Tokyo) ISO-like string */
@@ -109,7 +111,7 @@ const searchArticlesTool: ToolDef = {
 
 const getArticleTool: ToolDef = {
   name: 'get_article',
-  description: 'Get article details including full text (full_text), translation (full_text_ja), and summary.',
+  description: 'Get article details including full text (full_text), translation (full_text_translated), and summary.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -131,7 +133,7 @@ const getArticleTool: ToolDef = {
       lang: article.lang,
       summary: article.summary,
       full_text: truncate(article.full_text, 15000),
-      full_text_ja: truncate((article as ArticleDetail).full_text_ja, 15000),
+      full_text_translated: truncate((article as ArticleDetail).full_text_translated, 15000),
       seen_at: article.seen_at,
     })
   },
@@ -277,16 +279,17 @@ const translateArticleTool: ToolDef = {
     required: ['article_id'],
   },
   execute: async (input) => {
+    const userLang = getSetting('general.language') || DEFAULT_LANGUAGE
     const article = getArticleById(input.article_id as number) as ArticleDetail | undefined
     if (!article) return JSON.stringify({ error: 'Article not found' })
-    if (article.full_text_ja) return JSON.stringify({ full_text_ja: article.full_text_ja, cached: true })
+    if (article.full_text_translated && article.translated_lang === userLang) return JSON.stringify({ full_text_translated: article.full_text_translated, cached: true })
     if (!article.full_text) return JSON.stringify({ error: 'No full text available' })
-    if (article.lang === 'ja') return JSON.stringify({ error: 'Article is already in Japanese' })
+    if (article.lang === userLang) return JSON.stringify({ error: `Article is already in ${userLang}` })
 
-    const { fullTextJa } = await translateArticle(article.full_text)
-    updateArticleContent(article.id, { full_text_ja: fullTextJa })
+    const { fullTextTranslated } = await translateArticle(article.full_text)
+    updateArticleContent(article.id, { full_text_translated: fullTextTranslated, translated_lang: userLang })
     updateScore(article.id)
-    return JSON.stringify({ full_text_ja: fullTextJa })
+    return JSON.stringify({ full_text_translated: fullTextTranslated })
   },
 }
 

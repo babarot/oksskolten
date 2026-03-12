@@ -89,7 +89,7 @@ interface SeedArticle {
   title: string
   url: string
   full_text: string | null
-  full_text_ja: string | null
+  full_text_translated: string | null
   summary: string | null
   summary_ja: string | null
   excerpt: string | null
@@ -160,7 +160,7 @@ function createArticle(overrides: Partial<SeedArticle> & Pick<SeedArticle, 'feed
   return {
     id: nextArticleId++,
     full_text: null,
-    full_text_ja: null,
+    full_text_translated: null,
     summary: null,
     summary_ja: null,
     excerpt: null,
@@ -200,7 +200,8 @@ function toArticleDetail(a: SeedArticle): ArticleDetail {
   return {
     ...toArticleListItem(a),
     full_text: a.full_text,
-    full_text_ja: translatedIds.has(a.id) ? (a.full_text_ja ?? null) : null,
+    full_text_translated: translatedIds.has(a.id) ? (a.full_text_translated ?? null) : null,
+    translated_lang: translatedIds.has(a.id) ? getLocale() : null,
     images_archived_at: null,
     feed_type: feeds.find(f => f.id === a.feed_id)?.type ?? 'rss',
     imageArchivingEnabled: false,
@@ -456,7 +457,7 @@ export const demoStore = {
       const title = a.title.toLowerCase()
       const feed = feedName(a.feed_id).toLowerCase()
       const text = (a.full_text ?? '').toLowerCase()
-      const textJa = translatedIds.has(a.id) ? (a.full_text_ja ?? '').toLowerCase() : ''
+      const textJa = translatedIds.has(a.id) ? (a.full_text_translated ?? '').toLowerCase() : ''
       return title.includes(query) || feed.includes(query) || text.includes(query) || textJa.includes(query)
     })
 
@@ -509,10 +510,10 @@ export const demoStore = {
   /** Get pre-prepared translation for streaming. */
   getArticleTranslation(id: number): string | null {
     const a = articles.find(a => a.id === id)
-    return a?.full_text_ja ?? null
+    return a?.full_text_translated ?? null
   },
 
-  /** Mark an article as translated so full_text_ja becomes searchable. */
+  /** Mark an article as translated so full_text_translated becomes searchable. */
   markTranslated(id: number) {
     translatedIds.add(id)
   },
