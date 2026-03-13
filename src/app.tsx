@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, lazy, Suspense } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import useSWR, { SWRConfig } from 'swr'
 import { useSettings, type Settings } from './hooks/use-settings'
@@ -14,9 +14,9 @@ import { ArticleList, type ArticleListHandle } from './components/article/articl
 import { ArticleDetail } from './components/article/article-detail'
 import { ArticleRawPage } from './components/article/article-raw-page'
 import { PageLayout } from './components/layout/page-layout'
-import { SettingsPage } from './pages/settings-page'
-import { ChatPage } from './pages/chat-page'
-import { HomePage } from './pages/home-page'
+const SettingsPage = lazy(() => import('./pages/settings-page').then(m => ({ default: m.SettingsPage })))
+const ChatPage = lazy(() => import('./pages/chat-page').then(m => ({ default: m.ChatPage })))
+const HomePage = lazy(() => import('./pages/home-page').then(m => ({ default: m.HomePage })))
 import { AuthShell } from './lib/auth-shell'
 import { ErrorBoundary } from './components/auth/error-boundary'
 import { HintBanner } from './components/ui/hint-banner'
@@ -134,7 +134,9 @@ function ArticleListPage() {
 function SettingsPageWrapper() {
   return (
     <PageLayout>
-      <SettingsPage />
+      <Suspense>
+        <SettingsPage />
+      </Suspense>
     </PageLayout>
   )
 }
@@ -158,7 +160,9 @@ function ChatPageWrapper() {
       detailTitle={conversationTitle}
       onBack={() => navigate('/chat')}
     >
-      <ChatPage />
+      <Suspense>
+        <ChatPage />
+      </Suspense>
     </PageLayout>
   )
 }
@@ -166,7 +170,9 @@ function ChatPageWrapper() {
 function HomePageWrapper() {
   return (
     <PageLayout>
-      <HomePage />
+      <Suspense>
+        <HomePage />
+      </Suspense>
     </PageLayout>
   )
 }
