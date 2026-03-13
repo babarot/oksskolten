@@ -22,11 +22,11 @@ import { getSetting } from '../db/settings.js'
 import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 import { articleUrlToPath } from '../../shared/url.js'
 
-/** Convert a UTC datetime string from SQLite to JST (Asia/Tokyo) ISO-like string */
-function toJST(utc: string | null): string | null {
+/** Convert a UTC datetime string from SQLite to a local-time ISO-like string */
+function toLocalTime(utc: string | null, timeZone?: string): string | null {
   if (!utc) return null
   const d = new Date(utc.endsWith('Z') ? utc : utc + 'Z')
-  return d.toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T')
+  return d.toLocaleString('sv-SE', { timeZone: timeZone || 'UTC' }).replace(' ', 'T')
 }
 
 /** Clamp a user-provided limit to a safe range. */
@@ -37,11 +37,15 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
 
 // --- Neutral tool definition (MCP / Anthropic compatible) ---
 
+export interface ToolContext {
+  timeZone?: string
+}
+
 export interface ToolDef {
   name: string
   description: string
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
-  execute: (input: Record<string, unknown>) => Promise<string>
+  execute: (input: Record<string, unknown>, context?: ToolContext) => Promise<string>
 }
 
 // --- Tool implementations ---
@@ -419,7 +423,7 @@ const getRecentActivityTool: ToolDef = {
       limit: { type: 'number', description: 'Maximum number of results (default: 15, max: 50)' },
     },
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const type = (input.type as string) ?? 'all'
     const limit = clampLimit(input.limit as number | undefined, 15, 50)
     const db = getDb()
@@ -467,9 +471,9 @@ const getRecentActivityTool: ToolDef = {
       title: r.title,
       feed_name: r.feed_name,
       url: articleUrlToPath(r.url),
-      published_at: toJST(r.published_at),
+      published_at: toLocalTime(r.published_at, context?.timeZone),
       summary: r.summary?.slice(0, 200) ?? null,
-      activity_at: toJST(r.activity_at),
+      activity_at: toLocalTime(r.activity_at, context?.timeZone),
       activity_type: r.activity_type,
     })))
   },
@@ -576,8 +580,8 @@ export function toGeminiTools() {
 
 const toolMap = new Map(TOOLS.map(t => [t.name, t]))
 
-export async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+export async function executeTool(name: string, input: Record<string, unknown>, context?: ToolContext): Promise<string> {
   const tool = toolMap.get(name)
   if (!tool) throw new Error(`Unknown tool: ${name}`)
-  return tool.execute(input)
+  return tool.execute(input, context)
 }

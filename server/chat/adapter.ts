@@ -19,6 +19,7 @@ export interface ChatTurnParams {
   messages: Message[]
   system: string
   model: string
+  timeZone?: string
   onEvent: (event: ChatSSEEvent) => void
 }
 

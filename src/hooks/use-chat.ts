@@ -51,6 +51,7 @@ export function useChat(articleId?: number, context?: 'home') {
           article_id: articleId,
           context,
           suggestion_key: opts?.suggestionKey,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
         (event: ChatSSEEvent) => {
           if (abortRef.current) return

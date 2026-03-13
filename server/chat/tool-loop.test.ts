@@ -72,8 +72,8 @@ describe('runToolLoop', () => {
 
     // Both tools should have been called
     expect(executeTool).toHaveBeenCalledTimes(2)
-    expect(executeTool).toHaveBeenCalledWith('get_feeds', {})
-    expect(executeTool).toHaveBeenCalledWith('get_categories', {})
+    expect(executeTool).toHaveBeenCalledWith('get_feeds', {}, { timeZone: undefined })
+    expect(executeTool).toHaveBeenCalledWith('get_categories', {}, { timeZone: undefined })
 
     // If parallel, get_categories (10ms) should finish before get_feeds (50ms)
     expect(executionOrder).toEqual(['get_categories', 'get_feeds'])

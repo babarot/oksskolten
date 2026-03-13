@@ -11,6 +11,7 @@ const ChatBody = z.object({
   conversation_id: z.string().optional(),
   article_id: z.number().optional(),
   context: z.literal('home').optional(),
+  timeZone: z.string().optional(),
 })
 
 const ArticleIdQuery = z.object({
@@ -110,6 +111,7 @@ export function registerChatApi(app: FastifyInstance): void {
           messages: normalizedMessages,
           system: systemPrompt,
           model,
+          timeZone: body.timeZone,
           onEvent: (event) => {
             if (event.type === 'done') {
               sse.send({ ...event, elapsed_ms: Date.now() - startTime, model })

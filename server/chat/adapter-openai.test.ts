@@ -150,7 +150,7 @@ describe('runOpenAITurn', () => {
       onEvent: (e) => events.push(e),
     })
 
-    expect(mockExecuteTool).toHaveBeenCalledWith('search_articles', { query: 'test' })
+    expect(mockExecuteTool).toHaveBeenCalledWith('search_articles', { query: 'test' }, { timeZone: undefined })
     expect(events.some(e => e.type === 'tool_use_start' && e.name === 'search_articles')).toBe(true)
     expect(events.some(e => e.type === 'tool_use_end')).toBe(true)
     expect(events.filter(e => e.type === 'done')).toHaveLength(1)
@@ -284,7 +284,7 @@ describe('runOpenAITurn', () => {
       onEvent: vi.fn(),
     })
 
-    expect(mockExecuteTool).toHaveBeenCalledWith('search_articles', { query: 'hello' })
+    expect(mockExecuteTool).toHaveBeenCalledWith('search_articles', { query: 'hello' }, { timeZone: undefined })
   })
 
   it('handles multiple concurrent tool calls', async () => {
@@ -506,7 +506,7 @@ describe('OpenAI response to Anthropic format', () => {
     })
 
     // Should still proceed without crashing
-    expect(mockExecuteTool).toHaveBeenCalledWith('search_articles', {})
+    expect(mockExecuteTool).toHaveBeenCalledWith('search_articles', {}, { timeZone: undefined })
     expect(result.allMessages.length).toBeGreaterThan(2)
   })
 })

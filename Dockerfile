@@ -1,8 +1,7 @@
 FROM node:22-slim AS base
 
-ENV TZ=Asia/Tokyo
+ENV TZ=UTC
 RUN apt-get update -qq && apt-get install -y -qq ca-certificates curl tzdata \
- && ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime \
  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps

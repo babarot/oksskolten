@@ -148,7 +148,7 @@ describe('runChatTurn', () => {
     expect(events.some(e => e.type === 'tool_use_end')).toBe(true)
 
     // executeTool should have been called
-    expect(executeTool).toHaveBeenCalledWith('search_articles', { query: 'test' })
+    expect(executeTool).toHaveBeenCalledWith('search_articles', { query: 'test' }, { timeZone: undefined })
 
     // Should have 2 API calls
     expect(anthropic.messages.stream).toHaveBeenCalledTimes(2)
