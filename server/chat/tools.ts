@@ -29,6 +29,12 @@ function toJST(utc: string | null): string | null {
   return d.toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T')
 }
 
+/** Clamp a user-provided limit to a safe range. */
+function clampLimit(value: number | undefined, fallback: number, max: number): number {
+  if (value == null || !Number.isFinite(value)) return fallback
+  return Math.max(1, Math.min(Math.floor(value), max))
+}
+
 // --- Neutral tool definition (MCP / Anthropic compatible) ---
 
 export interface ToolDef {
@@ -54,7 +60,7 @@ const searchArticlesTool: ToolDef = {
       bookmarked: { type: 'boolean', description: 'Show bookmarked articles only' },
       since: { type: 'string', description: 'Start datetime (ISO 8601). Compared against published_at' },
       until: { type: 'string', description: 'End datetime (ISO 8601). Compared against published_at' },
-      limit: { type: 'number', description: 'Maximum number of results (default: 20)' },
+      limit: { type: 'number', description: 'Maximum number of results (default: 20, max: 100)' },
       sort: { type: 'string', enum: ['published_at', 'score'], description: 'Sort order (default: relevance for keyword search, published_at desc otherwise)' },
     },
   },
@@ -67,7 +73,7 @@ const searchArticlesTool: ToolDef = {
     const bookmarked = input.bookmarked as boolean | undefined
     const since = input.since as string | undefined
     const until = input.until as string | undefined
-    const limit = (input.limit as number | undefined) ?? 20
+    const limit = clampLimit(input.limit as number | undefined, 20, 100)
     const sort = input.sort as 'published_at' | 'score' | undefined
 
     let results: ArticleListItem[]
@@ -410,12 +416,12 @@ const getRecentActivityTool: ToolDef = {
         enum: ['read', 'liked', 'bookmarked', 'all'],
         description: 'Activity type filter (default: all)',
       },
-      limit: { type: 'number', description: 'Maximum number of results (default: 15)' },
+      limit: { type: 'number', description: 'Maximum number of results (default: 15, max: 50)' },
     },
   },
   execute: async (input) => {
     const type = (input.type as string) ?? 'all'
-    const limit = (input.limit as number) ?? 15
+    const limit = clampLimit(input.limit as number | undefined, 15, 50)
     const db = getDb()
 
     // Build UNION query based on type filter
@@ -476,13 +482,13 @@ const getSimilarArticlesTool: ToolDef = {
     type: 'object',
     properties: {
       article_id: { type: 'number', description: 'Article ID to find similar articles for' },
-      limit: { type: 'number', description: 'Maximum number of results (default: 5)' },
+      limit: { type: 'number', description: 'Maximum number of results (default: 5, max: 20)' },
     },
     required: ['article_id'],
   },
   execute: async (input) => {
     const articleId = input.article_id as number
-    const limit = (input.limit as number) ?? 5
+    const limit = clampLimit(input.limit as number | undefined, 5, 20)
 
     if (!isSearchReady()) {
       return JSON.stringify({ error: 'Search index is building' })

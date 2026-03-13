@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { FastifyReply } from 'fastify'
 
-export const NumericIdParams = z.object({ id: z.coerce.number() })
+export const NumericIdParams = z.object({ id: z.coerce.number().int().positive() })
 export const StringIdParams = z.object({ id: z.string() })
 
 /**
