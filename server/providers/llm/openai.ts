@@ -37,7 +37,7 @@ export const openaiProvider: LLMProvider = {
 
     const response = await client.chat.completions.create({
       model: params.model,
-      max_tokens: params.maxTokens,
+      max_completion_tokens: params.maxTokens,
       messages,
     })
 
@@ -64,7 +64,7 @@ export const openaiProvider: LLMProvider = {
 
     const stream = await client.chat.completions.create({
       model: params.model,
-      max_tokens: params.maxTokens,
+      max_completion_tokens: params.maxTokens,
       messages,
       stream: true,
       stream_options: { include_usage: true },

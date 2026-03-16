@@ -38,7 +38,8 @@ export const GEMINI_MODELS: ModelGroup[] = [
 
 export const OPENAI_MODELS: ModelGroup[] = [
   { group: 'Latest', models: [
-    { value: 'gpt-5.2', label: 'GPT-5.2', pricing: [1.75, 14] },
+    { value: 'gpt-5.4', label: 'GPT-5.4', pricing: [2.50, 15] },
+    { value: 'gpt-5.3', label: 'GPT-5.3', pricing: [1.75, 14] },
     { value: 'gpt-5-mini', label: 'GPT-5 Mini', pricing: [0.25, 2] },
     { value: 'gpt-5-nano', label: 'GPT-5 Nano', pricing: [0.05, 0.40] },
   ]},
@@ -48,6 +49,7 @@ export const OPENAI_MODELS: ModelGroup[] = [
     { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', pricing: [0.10, 0.40] },
   ]},
   { group: 'Legacy', models: [
+    { value: 'gpt-5.2', label: 'GPT-5.2', pricing: [1.75, 14] },
     { value: 'gpt-4o', label: 'GPT-4o', pricing: [2.50, 10] },
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini', pricing: [0.15, 0.60] },
   ]},

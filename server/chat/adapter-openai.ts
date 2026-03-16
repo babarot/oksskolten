@@ -100,7 +100,7 @@ export async function runOpenAITurn(params: ChatTurnParams): Promise<RunChatTurn
 
     const stream = await client.chat.completions.create({
       model,
-      max_tokens: CHAT_MAX_TOKENS,
+      max_completion_tokens: CHAT_MAX_TOKENS,
       messages: openaiMessages,
       tools,
       stream: true,
