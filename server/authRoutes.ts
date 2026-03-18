@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { compareSync, hashSync } from 'bcryptjs'
 import { getDb, getSetting } from './db.js'
+
+const BCRYPT_ROUNDS = process.env.NODE_ENV === 'test' ? 4 : 12
 import { requireAuth, requireJson } from './auth.js'
 import { isGitHubOAuthEnabled } from './oauthRoutes.js'
 import { parseOrBadRequest } from './lib/validation.js'
@@ -96,7 +98,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!body) return
 
     const db = getDb()
-    const passwordHash = hashSync(body.password, 12)
+    const passwordHash = hashSync(body.password, BCRYPT_ROUNDS)
     const result = db.prepare(
       'INSERT INTO users (email, password_hash) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)'
     ).run(body.email, passwordHash)
@@ -142,7 +144,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    const newHash = hashSync(body.newPassword, 12)
+    const newHash = hashSync(body.newPassword, BCRYPT_ROUNDS)
     db.prepare("UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = datetime('now') WHERE email = ?").run(newHash, email)
 
     const updated = db.prepare('SELECT token_version FROM users WHERE email = ?').get(email) as { token_version: number }

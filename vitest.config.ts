@@ -31,7 +31,7 @@ export default defineConfig({
           name: 'server',
           include: ['server/**/*.test.ts'],
           environment: 'node',
-          env: { DATABASE_URL: ':memory:', AUTH_DISABLED: '1' },
+          env: { DATABASE_URL: ':memory:', AUTH_DISABLED: '1', NODE_ENV: 'test' },
           setupFiles: ['server/__tests__/setup.ts'],
         },
       },
