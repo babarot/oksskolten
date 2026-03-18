@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
 jobs:
   check:
     name: Typecheck & Lint
@@ -45,11 +50,40 @@ jobs:
         run: npx vitest run --project server --coverage.enabled --coverage.reporter=json-summary --coverage.reportsDirectory=coverage/server
 
       - name: Upload coverage
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: server-coverage
           path: coverage/server/coverage-summary.json
+          retention-days: 30
+
+      - name: Download base coverage
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v16
+        with:
+          name: server-coverage
+          path: coverage/server-base
+          branch: main
+          workflow_conclusion: success
+          if_no_artifact_found: warn
+
+      - name: Check base coverage exists
+        if: github.event_name == 'pull_request'
+        id: check-base
+        run: |
+          if [ -f coverage/server-base/coverage-summary.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Coverage Report
+        if: always() && github.event_name == 'pull_request'
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          name: Server Coverage
+          json-summary-path: coverage/server/coverage-summary.json
+          json-summary-compare-path: ${{ steps.check-base.outputs.exists == 'true' && 'coverage/server-base/coverage-summary.json' || '' }}
 
   client-test:
     name: Client Tests
@@ -71,9 +105,37 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Upload coverage
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: client-coverage
           path: coverage/client/coverage-summary.json
+          retention-days: 30
 
+      - name: Download base coverage
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v16
+        with:
+          name: client-coverage
+          path: coverage/client-base
+          branch: main
+          workflow_conclusion: success
+          if_no_artifact_found: warn
+
+      - name: Check base coverage exists
+        if: github.event_name == 'pull_request'
+        id: check-base
+        run: |
+          if [ -f coverage/client-base/coverage-summary.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Coverage Report
+        if: always() && github.event_name == 'pull_request'
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          name: Client Coverage
+          json-summary-path: coverage/client/coverage-summary.json
+          json-summary-compare-path: ${{ steps.check-base.outputs.exists == 'true' && 'coverage/client-base/coverage-summary.json' || '' }}
