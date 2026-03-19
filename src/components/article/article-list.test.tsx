@@ -89,6 +89,22 @@ vi.mock('./article-card', () => ({
   ),
 }))
 
+vi.mock('./article-overlay', () => ({
+  ArticleOverlay: () => null,
+}))
+
+vi.mock('../feed/feed-error-banner', () => ({
+  FeedErrorBanner: () => null,
+}))
+
+vi.mock('../ui/skeleton', () => ({
+  Skeleton: ({ className }: { className?: string }) => <div data-testid="skeleton" className={`animate-pulse ${className ?? ''}`} />,
+}))
+
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+}))
+
 import { ArticleList } from './article-list'
 
 function makeArticle(overrides: Partial<ArticleListItem> = {}): ArticleListItem {
