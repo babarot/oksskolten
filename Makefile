@@ -36,6 +36,7 @@ lint: ## Run ESLint
 lint-docs: ## Lint docs (spec and guide structure policies)
 	conftest verify --policy policy/spec
 	conftest verify --policy policy/guides
+	conftest verify --policy policy/adr
 	@bash scripts/lint-docs.sh
 
 build-demo: ## Build demo site (catches demo-mode export mismatches)

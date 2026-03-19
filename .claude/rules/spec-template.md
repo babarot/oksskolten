@@ -24,3 +24,4 @@ Rules:
 - **No redundant feature-name H2** (e.g., `## Clip` is wrong — the H1 already contains the name)
 - **Max heading depth**: H4
 - When creating a new spec, also add it to the index in `docs/spec/01_overview.md`
+- Validate with `make lint-docs`

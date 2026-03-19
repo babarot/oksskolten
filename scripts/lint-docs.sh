@@ -3,13 +3,14 @@ set -euo pipefail
 
 SPEC_DIR="docs/spec"
 GUIDE_DIR="docs/guides"
+ADR_DIR="docs/adr"
 REMARK="./node_modules/.bin/remark"
 PROJECT_ROOT="$(pwd)"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
-mkdir -p "$tmpdir/spec" "$tmpdir/guides"
+mkdir -p "$tmpdir/spec" "$tmpdir/guides" "$tmpdir/adr"
 
 # Collect all spec filenames as a JSON array for cross-file checks
 all_filenames=$(printf '%s\n' "$SPEC_DIR"/*.md | xargs -I{} basename {} | jq -MRs 'split("\n") | map(select(. != ""))')
@@ -60,6 +61,24 @@ if [ -d "$GUIDE_DIR" ]; then
   done
 fi
 
+# Phase 1c: Convert ADR files to JSON ASTs in parallel
+if [ -d "$ADR_DIR" ]; then
+  for file in "$ADR_DIR"/*.md; do
+    [ -f "$file" ] || continue
+    name=$(basename "$file")
+
+    metadata=$(jq -Mn \
+      --arg filename "$name" \
+      '{metadata: {filename: $filename}}')
+
+    (
+      "$REMARK" --tree-out < "$file" 2>/dev/null \
+        | jq -M -s ".[0] * $metadata" \
+        > "$tmpdir/adr/$name"
+    ) &
+  done
+fi
+
 wait
 
 # Phase 2: Run conftest separately for each policy scope
@@ -70,4 +89,9 @@ echo "conftest test --policy policy/spec"
 if ls "$tmpdir/guides"/*.md &>/dev/null; then
   echo "conftest test --policy policy/guides"
   (cd "$tmpdir/guides" && conftest test --parser json --policy "$PROJECT_ROOT/policy/guides" *.md)
+fi
+
+if ls "$tmpdir/adr"/*.md &>/dev/null; then
+  echo "conftest test --policy policy/adr"
+  (cd "$tmpdir/adr" && conftest test --parser json --policy "$PROJECT_ROOT/policy/adr" *.md)
 fi

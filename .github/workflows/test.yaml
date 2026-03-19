@@ -37,6 +37,7 @@ jobs:
             docs:
               - 'docs/spec/**'
               - 'docs/guides/**'
+              - 'docs/adr/**'
               - 'policy/**'
               - 'scripts/lint-docs.sh'
             client:
@@ -211,6 +212,7 @@ jobs:
         run: |
           conftest verify --policy policy/spec
           conftest verify --policy policy/guides
+          conftest verify --policy policy/adr
 
       - name: Lint docs
         run: bash scripts/lint-docs.sh
