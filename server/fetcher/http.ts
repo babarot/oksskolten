@@ -28,9 +28,8 @@ function charsetFromContentType(ct: string): string | null {
  * Only scans ASCII-compatible portions to avoid being affected by BOM or binary headers.
  */
 function charsetFromBytes(buf: Uint8Array): string | null {
-  // Read the first 2048 bytes as ASCII (multibyte chars will be garbled,
-  // but charset declarations are in the ASCII range so this is fine)
-  const head = new TextDecoder('ascii', { fatal: false }).decode(buf.slice(0, 2048))
+  // Read the first 2048 bytes as ASCII — charset declarations are always ASCII-range
+  const head = String.fromCharCode(...buf.slice(0, 2048))
   // XML: <?xml version="1.0" encoding="Shift_JIS"?>
   const mx = head.match(/<\?xml\s[^?]*encoding\s*=\s*["']([^"']+)/i)
   if (mx) return mx[1].toLowerCase()
@@ -38,14 +37,19 @@ function charsetFromBytes(buf: Uint8Array): string | null {
   const m1 = head.match(/<meta\s[^>]*charset\s*=\s*"?([^"\s;>]+)/i)
   if (m1) return m1[1].toLowerCase()
   // HTML: <meta http-equiv="Content-Type" content="text/html; charset=EUC-JP">
+  // Also handles reversed attribute order: <meta content="...; charset=EUC-JP" http-equiv="Content-Type">
   const m2 = head.match(/<meta\s[^>]*http-equiv\s*=\s*"?Content-Type"?[^>]*content\s*=\s*"[^"]*charset=([^"\s;]+)/i)
   if (m2) return m2[1].toLowerCase()
+  const m3 = head.match(/<meta\s[^>]*content\s*=\s*"[^"]*charset=([^"\s;]+)"[^>]*http-equiv\s*=\s*"?Content-Type"?/i)
+  if (m3) return m3[1].toLowerCase()
   return null
 }
 
 /**
  * Decode response body with auto-detected encoding.
  * Priority: Content-Type charset → HTML meta charset → UTF-8 fallback
+ *
+ * The response body must not have been consumed yet (no prior .text() or .arrayBuffer() call).
  */
 export async function decodeResponse(res: Response): Promise<string> {
   const ct = res.headers.get('content-type') || ''

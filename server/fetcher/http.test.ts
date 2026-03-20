@@ -17,7 +17,7 @@ vi.mock('./flaresolverr.js', () => ({
   fetchViaFlareSolverr: (...args: unknown[]) => mockFetchViaFlareSolverr(...args),
 }))
 
-import { fetchHtml, USER_AGENT, DEFAULT_TIMEOUT, DISCOVERY_TIMEOUT, PROBE_TIMEOUT } from './http.js'
+import { fetchHtml, decodeResponse, USER_AGENT, DEFAULT_TIMEOUT, DISCOVERY_TIMEOUT, PROBE_TIMEOUT } from './http.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -134,5 +134,83 @@ describe('fetchHtml', () => {
 
     const result = await fetchHtml('https://example.com')
     expect(result.contentType).toBe('')
+  })
+})
+
+// --- decodeResponse ---
+
+function fakeResponse(body: Uint8Array, contentType?: string): Response {
+  const headers = new Headers()
+  if (contentType) headers.set('content-type', contentType)
+  return {
+    headers,
+    text: async () => new TextDecoder('utf-8').decode(body),
+    arrayBuffer: async () => body.buffer,
+  } as Response
+}
+
+describe('decodeResponse', () => {
+  it('uses fast path for explicit UTF-8 charset', async () => {
+    const buf = new TextEncoder().encode('hello')
+    const res = fakeResponse(buf, 'text/html; charset=utf-8')
+    expect(await decodeResponse(res)).toBe('hello')
+  })
+
+  it('decodes Shift_JIS from Content-Type charset', async () => {
+    // "テスト" in Shift_JIS
+    const sjis = new Uint8Array([0x83, 0x65, 0x83, 0x58, 0x83, 0x67])
+    const res = fakeResponse(sjis, 'text/html; charset=Shift_JIS')
+    expect(await decodeResponse(res)).toBe('テスト')
+  })
+
+  it('detects charset from HTML meta tag when Content-Type has no charset', async () => {
+    const html = '<html><head><meta charset="Shift_JIS"></head><body>'
+    // Encode "テスト" with a Shift_JIS prefix
+    const metaBytes = new TextEncoder().encode(html)
+    const sjisBody = new Uint8Array([0x83, 0x65, 0x83, 0x58, 0x83, 0x67])
+    const buf = new Uint8Array(metaBytes.length + sjisBody.length)
+    buf.set(metaBytes, 0)
+    buf.set(sjisBody, metaBytes.length)
+    const res = fakeResponse(buf, 'text/html')
+    const result = await decodeResponse(res)
+    expect(result).toContain('テスト')
+  })
+
+  it('detects charset from XML encoding declaration', async () => {
+    const xmlDecl = '<?xml version="1.0" encoding="Shift_JIS"?>'
+    const declBytes = new TextEncoder().encode(xmlDecl)
+    const sjisBody = new Uint8Array([0x83, 0x65, 0x83, 0x58, 0x83, 0x67])
+    const buf = new Uint8Array(declBytes.length + sjisBody.length)
+    buf.set(declBytes, 0)
+    buf.set(sjisBody, declBytes.length)
+    const res = fakeResponse(buf, 'application/xml')
+    const result = await decodeResponse(res)
+    expect(result).toContain('テスト')
+  })
+
+  it('detects charset from http-equiv with reversed attribute order', async () => {
+    const html = '<html><head><meta content="text/html; charset=Shift_JIS" http-equiv="Content-Type"></head>'
+    const metaBytes = new TextEncoder().encode(html)
+    const sjisBody = new Uint8Array([0x83, 0x65, 0x83, 0x58, 0x83, 0x67])
+    const buf = new Uint8Array(metaBytes.length + sjisBody.length)
+    buf.set(metaBytes, 0)
+    buf.set(sjisBody, metaBytes.length)
+    const res = fakeResponse(buf, 'text/html')
+    const result = await decodeResponse(res)
+    expect(result).toContain('テスト')
+  })
+
+  it('falls back to UTF-8 for unknown charset label', async () => {
+    const html = '<html><head><meta charset="x-fake-encoding"></head><body>hello</body>'
+    const buf = new TextEncoder().encode(html)
+    const res = fakeResponse(buf, 'text/html')
+    const result = await decodeResponse(res)
+    expect(result).toContain('hello')
+  })
+
+  it('falls back to UTF-8 when no charset info is available', async () => {
+    const buf = new TextEncoder().encode('plain text')
+    const res = fakeResponse(buf)
+    expect(await decodeResponse(res)).toBe('plain text')
   })
 })
