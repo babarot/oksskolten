@@ -30,8 +30,9 @@ test-client: ## Run client tests
 typecheck: ## Run TypeScript type checking
 	npm run typecheck
 
-lint: ## Run ESLint
+lint: ## Run ESLint + Japanese character check
 	npm run lint
+	npx tsx scripts/lint-no-japanese.ts
 
 lint-docs: ## Lint docs (spec and guide structure policies)
 	conftest verify --policy policy/spec
