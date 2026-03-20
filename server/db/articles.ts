@@ -207,7 +207,7 @@ export function getArticleByUrl(url: string): ArticleDetail | undefined {
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
-    FROM articles a
+    FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.url = ?
   `).get(url) as ArticleDetail | undefined
@@ -220,7 +220,7 @@ export function getArticleById(id: number): ArticleDetail | undefined {
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
-    FROM articles a
+    FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.id = ?
   `).get(id) as ArticleDetail | undefined

@@ -338,7 +338,7 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
                  lang,
                  COALESCE(CAST(strftime('%s', published_at) AS INTEGER), 0) AS published_at,
                  COALESCE(score, 0) AS score
-          FROM articles WHERE id = ?
+          FROM active_articles WHERE id = ?
         `).get(existing.id) as MeiliArticleDoc | undefined
         if (movedDoc) syncArticleToSearch(movedDoc)
         reply.status(200).send({ article: moved, moved: true })
