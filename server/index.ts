@@ -7,7 +7,7 @@ import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import multipart from '@fastify/multipart'
 import cron, { type ScheduledTask } from 'node-cron'
-import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles } from './db.js'
+import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles, RETENTION_READ_DEFAULT, RETENTION_UNREAD_DEFAULT } from './db.js'
 import { logger } from './logger.js'
 
 const log = logger
@@ -219,8 +219,6 @@ cronTasks.push(cron.schedule('0 */6 * * *', async () => {
 // --- Retention policy ---
 // Daily cleanup of old articles based on user-configured retention settings.
 const RETENTION_SCHEDULE = process.env.RETENTION_SCHEDULE || '0 4 * * *'
-const RETENTION_READ_DEFAULT = 90
-const RETENTION_UNREAD_DEFAULT = 180
 
 cronTasks.push(cron.schedule(RETENTION_SCHEDULE, () => {
   const enabled = getSetting('retention.enabled')

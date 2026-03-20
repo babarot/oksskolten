@@ -626,6 +626,9 @@ export function getReadingStats(opts?: {
 
 // --- Retention policy ---
 
+export const RETENTION_READ_DEFAULT = 90
+export const RETENTION_UNREAD_DEFAULT = 180
+
 export function getRetentionStats(readDays: number, unreadDays: number): { readEligible: number; unreadEligible: number } {
   const readRow = getDb().prepare(`
     SELECT COUNT(*) AS cnt FROM articles

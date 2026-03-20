@@ -7,6 +7,8 @@ import {
   getRetentionStats,
   purgeExpiredArticles,
   getDb,
+  RETENTION_READ_DEFAULT,
+  RETENTION_UNREAD_DEFAULT,
 } from '../db.js'
 import { requireJson, getAuthUser } from '../auth.js'
 import { getAllModelValues, getModelValues } from '../../shared/models.js'
@@ -463,9 +465,6 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
   })
 
   // --- Retention policy ---
-
-  const RETENTION_READ_DEFAULT = 90
-  const RETENTION_UNREAD_DEFAULT = 180
 
   function getRetentionDays(): { readDays: number; unreadDays: number } {
     const readDays = Number(getSetting('retention.read_days')) || RETENTION_READ_DEFAULT
