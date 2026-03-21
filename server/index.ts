@@ -22,7 +22,7 @@ import { rebuildSearchIndex, isSearchReady, syncAllScoredArticlesToSearch } from
 
 // --- Startup guards ---
 if (process.env.AUTH_DISABLED === '1' && process.env.NODE_ENV !== 'development') {
-  log.error('FATAL: AUTH_DISABLED is only allowed when NODE_ENV=development')
+  log.error('FATAL: AUTH_DISABLED=1 requires NODE_ENV=development. Set NODE_ENV=development in your .env or environment.')
   process.exit(1)
 }
 
