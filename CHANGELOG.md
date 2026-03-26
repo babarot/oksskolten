@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.3](https://github.com/babarot/oksskolten/compare/v0.4.2...v0.4.3) - 2026-03-26
+### Others
+- Add fallback mechanism for RSS description as article content by @asonas in https://github.com/babarot/oksskolten/pull/46
+
 ## [v0.4.2](https://github.com/babarot/oksskolten/compare/v0.4.1...v0.4.2) - 2026-03-26
 ### Improvements
 - Add support for custom key bindings in settings by @asonas in https://github.com/babarot/oksskolten/pull/37
