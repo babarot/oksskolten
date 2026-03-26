@@ -36,6 +36,14 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions) {
   const optionsRef = useRef(options)
   optionsRef.current = options
 
+  // Fire onNearEnd only once per page; reset when items grow (new page loaded).
+  const nearEndFiredRef = useRef(false)
+  const itemsLengthRef = useRef(options.items.length)
+  if (options.items.length !== itemsLengthRef.current) {
+    itemsLengthRef.current = options.items.length
+    nearEndFiredRef.current = false
+  }
+
   useEffect(() => {
     if (!options.enabled) return
 
@@ -75,7 +83,8 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions) {
           const nextIndex = currentIndex + 1
           if (nextIndex < items.length) {
             onFocusChange(items[nextIndex])
-            if (items.length - nextIndex <= NEAR_END_THRESHOLD && onNearEnd) {
+            if (items.length - nextIndex <= NEAR_END_THRESHOLD && onNearEnd && !nearEndFiredRef.current) {
+              nearEndFiredRef.current = true
               onNearEnd()
             }
           }
