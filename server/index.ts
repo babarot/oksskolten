@@ -109,6 +109,10 @@ app.addHook('onResponse', (req, reply, done) => {
 app.addHook('onRequest', (_req, reply, done) => {
   reply.header('X-Frame-Options', 'DENY')
   reply.header('X-Content-Type-Options', 'nosniff')
+  // Prefer HTTP/2 over HTTP/3 at the edge while Tunnel requests are unstable
+  // for browser traffic. This gives browsers a clear signal to drop cached
+  // Alt-Svc advertisements from previous responses.
+  reply.header('Alt-Svc', 'clear')
   reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'")
   done()
 })
