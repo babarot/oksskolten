@@ -34,7 +34,8 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared
-    command: tunnel run
+    # Force HTTP/2 transport; QUIC has shown intermittent 502s on browser asset/page requests on this host.
+    command: tunnel --protocol http2 run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
     networks:
