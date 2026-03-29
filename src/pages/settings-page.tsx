@@ -23,9 +23,10 @@ export function SettingsPage() {
   const tab = tabParam ?? 'general'
   const { t } = useI18n()
   const navigate = useNavigate()
+  const settingsChunkVersion = '2026-03-29-2'
 
   return (
-    <div className="bg-bg">
+    <div className="bg-bg" data-settings-version={settingsChunkVersion}>
       <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-8">
         <h1 className="text-2xl font-bold text-text mb-4 select-none">{t('settings.title')}</h1>
       </div>
