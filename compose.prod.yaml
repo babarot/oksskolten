@@ -12,7 +12,8 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
     volumes: !override
       - ${DATA_DIR:-./data}:/data
-    ports: !override []
+    ports: !override
+      - "3000:3000"
     expose:
       - "3000"
 

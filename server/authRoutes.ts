@@ -1,10 +1,21 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { compareSync, hashSync } from 'bcryptjs'
-import { getDb, getSetting } from './db.js'
+import {
+  createInitialOwner,
+  consumeInvitation,
+  ensureClipFeed,
+  getDb,
+  getInvitationPreview,
+  getOwnerCount,
+  getSetting,
+  getUserByEmail,
+  recordUserLogin,
+  updateUserPassword,
+} from './db.js'
 
 const BCRYPT_ROUNDS = process.env.NODE_ENV === 'test' ? 4 : 12
-import { requireAuth, requireJson } from './auth.js'
+import { getRequestIdentity, requireAuth, requireJson } from './auth.js'
 import { isGitHubOAuthEnabled } from './oauthRoutes.js'
 import { parseOrBadRequest } from './lib/validation.js'
 
@@ -28,6 +39,19 @@ const ChangeEmailBody = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
 })
 
+const InvitationAcceptBody = z.object({
+  token: z.string().min(1, 'token is required'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+})
+
+function signUserToken(app: FastifyInstance, user: { id: number; role: string; token_version: number }): string {
+  return app.jwt.sign({
+    sub: user.id,
+    role: user.role,
+    token_version: user.token_version,
+  })
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('onRequest', async (_request, reply) => {
     reply.header('Cache-Control', 'no-store')
@@ -41,7 +65,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({ ok: true })
     }
 
-    // Check if password auth is disabled (passkey-only mode)
     if (getSetting('auth.password_enabled') === '0') {
       return reply.status(403).send({ error: 'Password authentication is disabled' })
     }
@@ -49,16 +72,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const body = parseOrBadRequest(LoginBody, request.body, reply)
     if (!body) return
 
-    const db = getDb()
-    const user = db.prepare('SELECT email, password_hash, token_version FROM users WHERE email = ?').get(body.email) as
-      | { email: string; password_hash: string; token_version: number }
-      | undefined
-
-    if (!user || !compareSync(body.password, user.password_hash)) {
+    const user = getUserByEmail(body.email)
+    if (!user || user.status !== 'active' || !compareSync(body.password, user.password_hash)) {
       return reply.status(401).send({ error: 'Invalid credentials' })
     }
 
-    const token = app.jwt.sign({ email: user.email, token_version: user.token_version })
+    recordUserLogin(user.id)
+    const token = signUserToken(app, user)
     reply.send({ ok: true, token })
   })
 
@@ -66,28 +86,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     reply.send({ ok: true })
   })
 
-  app.get('/api/me', async (request, reply) => {
+  app.get('/api/me', { preHandler: [requireAuth] }, async (request, reply) => {
     if (process.env.AUTH_DISABLED === '1') {
-      return reply.send({ email: 'local' })
+      return reply.send({ id: 0, email: 'local', role: 'owner', status: 'active' })
     }
 
-    try {
-      await request.jwtVerify()
-      const { email, token_version } = request.user as { email: string; token_version: number }
-
-      const db = getDb()
-      const user = db.prepare('SELECT token_version FROM users WHERE email = ?').get(email) as
-        | { token_version: number }
-        | undefined
-
-      if (!user || user.token_version !== token_version) {
-        return reply.status(401).send({ error: 'Unauthorized' })
-      }
-
-      reply.send({ email })
-    } catch {
-      reply.status(401).send({ error: 'Unauthorized' })
+    const identity = getRequestIdentity(request)
+    if (!identity?.userId || !identity.email || !identity.role || !identity.status) {
+      return reply.status(401).send({ error: 'Unauthorized' })
     }
+
+    reply.send({
+      id: identity.userId,
+      email: identity.email,
+      role: identity.role,
+      status: identity.status,
+    })
   })
 
   app.post('/api/auth/setup', {
@@ -97,19 +111,55 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const body = parseOrBadRequest(SetupBody, request.body, reply)
     if (!body) return
 
-    const db = getDb()
     const passwordHash = hashSync(body.password, BCRYPT_ROUNDS)
-    const result = db.prepare(
-      'INSERT INTO users (email, password_hash) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)'
-    ).run(body.email, passwordHash)
+    const user = createInitialOwner(body.email, passwordHash)
 
-    if (result.changes === 0) {
+    if (!user) {
       return reply.status(403).send({ error: 'Setup is not available' })
     }
 
-    const user = db.prepare('SELECT email, token_version FROM users WHERE email = ?').get(body.email) as
-      | { email: string; token_version: number }
-    const token = app.jwt.sign({ email: user.email, token_version: user.token_version })
+    ensureClipFeed(user.id)
+    const token = signUserToken(app, user)
+    reply.send({ ok: true, token })
+  })
+
+  app.get('/api/auth/invitations/:token', async (request, reply) => {
+    const params = z.object({ token: z.string().min(1) }).safeParse(request.params)
+    if (!params.success) {
+      return reply.status(400).send({ error: 'Invalid invitation token' })
+    }
+    const invitation = getInvitationPreview(params.data.token)
+    if (!invitation) {
+      return reply.status(404).send({ error: 'Invitation not found or expired' })
+    }
+    reply.send({
+      email: invitation.email,
+      role: invitation.role,
+      status: invitation.status,
+      expires_at: invitation.expires_at,
+    })
+  })
+
+  app.post('/api/auth/invitations/accept', {
+    preHandler: [requireJson],
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    const body = parseOrBadRequest(InvitationAcceptBody, request.body, reply)
+    if (!body) return
+
+    const invitedUser = consumeInvitation(body.token)
+    if (!invitedUser || invitedUser.status === 'disabled') {
+      return reply.status(400).send({ error: 'Invitation is invalid or expired' })
+    }
+
+    const updated = updateUserPassword(invitedUser.id, hashSync(body.password, BCRYPT_ROUNDS), true)
+    if (!updated) {
+      return reply.status(400).send({ error: 'Invitation could not be accepted' })
+    }
+
+    ensureClipFeed(updated.id)
+    recordUserLogin(updated.id)
+    const token = signUserToken(app, updated)
     reply.send({ ok: true, token })
   })
 
@@ -120,35 +170,38 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const body = parseOrBadRequest(ChangePasswordBody, request.body, reply)
     if (!body) return
 
-    const db = getDb()
-    const { email } = request.user as { email: string }
-    const user = db.prepare('SELECT password_hash FROM users WHERE email = ?').get(email) as
-      | { password_hash: string }
-      | undefined
+    const identity = getRequestIdentity(request)
+    if (!identity?.userId) {
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
 
-    if (!user) {
+    const user = getUserByEmail(identity.email ?? '')
+    if (!user || user.status !== 'active') {
       return reply.status(401).send({ error: 'Unauthorized' })
     }
 
     if (body.currentPassword) {
-      // Change mode: verify current password
       if (!compareSync(body.currentPassword, user.password_hash)) {
         return reply.status(401).send({ error: 'Current password is incorrect' })
       }
     } else {
-      // Reset mode: require alternative auth method
-      const passkeyCount = (db.prepare('SELECT COUNT(*) AS cnt FROM credentials').get() as { cnt: number }).cnt
-      const githubEnabled = isGitHubOAuthEnabled()
+      const db = getDb()
+      const passkeyCount = (db.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM credentials
+        WHERE user_id = ? OR user_id IS NULL
+      `).get(user.id) as { cnt: number }).cnt
+      const githubEnabled = isGitHubOAuthEnabled() && !!user.github_login
       if (passkeyCount === 0 && !githubEnabled) {
         return reply.status(400).send({ error: 'Current password is required' })
       }
     }
 
-    const newHash = hashSync(body.newPassword, BCRYPT_ROUNDS)
-    db.prepare("UPDATE users SET password_hash = ?, token_version = token_version + 1, updated_at = datetime('now') WHERE email = ?").run(newHash, email)
-
-    const updated = db.prepare('SELECT token_version FROM users WHERE email = ?').get(email) as { token_version: number }
-    const token = app.jwt.sign({ email, token_version: updated.token_version })
+    const updated = updateUserPassword(user.id, hashSync(body.newPassword, BCRYPT_ROUNDS))
+    if (!updated) {
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
+    const token = signUserToken(app, updated)
 
     reply.send({ ok: true, token })
   })
@@ -160,13 +213,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const body = parseOrBadRequest(ChangeEmailBody, request.body, reply)
     if (!body) return
 
-    const db = getDb()
-    const { email } = request.user as { email: string }
-    const user = db.prepare('SELECT password_hash FROM users WHERE email = ?').get(email) as
-      | { password_hash: string }
-      | undefined
+    const identity = getRequestIdentity(request)
+    if (!identity?.userId || !identity.email) {
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
 
-    if (!user) {
+    const user = getUserByEmail(identity.email)
+    if (!user || user.status !== 'active') {
       return reply.status(401).send({ error: 'Unauthorized' })
     }
 
@@ -175,21 +228,31 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const trimmed = body.newEmail.trim()
-    if (trimmed === email) {
+    if (trimmed === user.email) {
       return reply.status(400).send({ error: 'New email is the same as current email' })
     }
 
-    // Check if new email is already taken
-    const existing = db.prepare('SELECT 1 FROM users WHERE email = ?').get(trimmed)
+    const existing = getUserByEmail(trimmed)
     if (existing) {
       return reply.status(409).send({ error: 'Email is already in use' })
     }
 
-    db.prepare("UPDATE users SET email = ?, token_version = token_version + 1, updated_at = datetime('now') WHERE email = ?").run(trimmed, email)
+    getDb().prepare(`
+      UPDATE users
+      SET email = ?, token_version = token_version + 1, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(trimmed, user.id)
 
-    const updated = db.prepare('SELECT token_version FROM users WHERE email = ?').get(trimmed) as { token_version: number }
-    const token = app.jwt.sign({ email: trimmed, token_version: updated.token_version })
+    const updated = getUserByEmail(trimmed)
+    if (!updated) {
+      return reply.status(500).send({ error: 'Failed to update email' })
+    }
 
+    const token = signUserToken(app, updated)
     reply.send({ ok: true, token })
+  })
+
+  app.get('/api/auth/bootstrap', async (_request, reply) => {
+    reply.send({ setup_required: getOwnerCount() === 0 })
   })
 }

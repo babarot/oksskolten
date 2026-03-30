@@ -1,4 +1,5 @@
 import { MeiliSearch } from 'meilisearch'
+import { getCurrentUserId } from '../identity.js'
 
 const MEILI_URL = process.env.MEILI_URL || 'http://localhost:7700'
 const MEILI_MASTER_KEY = process.env.MEILI_MASTER_KEY || undefined
@@ -17,6 +18,7 @@ export const ARTICLES_STAGING_INDEX = 'articles_staging'
 
 export interface MeiliArticleDoc {
   id: number
+  user_id: number | null
   feed_id: number
   category_id: number | null
   title: string
@@ -34,6 +36,7 @@ export interface MeiliArticleDoc {
  * Build a Meilisearch filter string from optional filter params.
  */
 export function buildMeiliFilter(opts: {
+  user_id?: number | null
   feed_id?: number
   category_id?: number
   since?: string
@@ -43,6 +46,8 @@ export function buildMeiliFilter(opts: {
   bookmarked?: boolean
 }): string | undefined {
   const parts: string[] = []
+  const userId = opts.user_id ?? getCurrentUserId()
+  if (userId != null) parts.push(`user_id = ${userId}`)
   if (opts.feed_id) parts.push(`feed_id = ${opts.feed_id}`)
   if (opts.category_id) parts.push(`category_id = ${opts.category_id}`)
   if (opts.since) parts.push(`published_at >= ${Math.floor(new Date(opts.since).getTime() / 1000)}`)

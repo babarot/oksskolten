@@ -8,7 +8,7 @@ import {
   purgeExpiredArticles,
   getDb,
 } from '../db.js'
-import { requireJson, getAuthUser } from '../auth.js'
+import { requireJson, getAuthUser, getRequestUserId } from '../auth.js'
 import { getAllModelValues, getModelValues } from '../../shared/models.js'
 import { assertSafeUrl } from '../fetcher/ssrf.js'
 import { extractByDotPath } from '../fetcher/article-images.js'
@@ -98,10 +98,10 @@ const PROVIDER_MODEL_PAIRS: Array<{ providerKey: PrefKey; modelKey: PrefKey }> =
   { providerKey: 'translate.provider', modelKey: 'translate.model' },
 ]
 
-function validateProviderModel(body: Record<string, unknown>): string | null {
+function validateProviderModel(body: Record<string, unknown>, userId: number | null): string | null {
   for (const { providerKey, modelKey } of PROVIDER_MODEL_PAIRS) {
-    const model = body[modelKey] !== undefined ? String(body[modelKey]) : getSetting(modelKey)
-    const provider = body[providerKey] !== undefined ? String(body[providerKey]) : getSetting(providerKey)
+    const model = body[modelKey] !== undefined ? String(body[modelKey]) : getSetting(modelKey, userId)
+    const provider = body[providerKey] !== undefined ? String(body[providerKey]) : getSetting(providerKey, userId)
     if (!model || !provider) continue
     // google-translate, deepl, ollama, and OpenAI-compatible APIs have no fixed server-side model list
     if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama' || provider === 'openai') continue
@@ -118,13 +118,14 @@ function validateProviderModel(body: Record<string, unknown>): string | null {
 export async function settingsRoutes(api: FastifyInstance): Promise<void> {
   api.get('/api/settings/profile', async (request, reply) => {
     const authEmail = getAuthUser(request) ?? 'localhost'
-    let accountName = getSetting('profile.account_name')
+    const userId = getRequestUserId(request)
+    let accountName = getSetting('profile.account_name', userId)
     if (!accountName) {
       accountName = authEmail
-      upsertSetting('profile.account_name', accountName)
+      upsertSetting('profile.account_name', accountName, userId)
     }
-    const avatarSeed = getSetting('profile.avatar_seed') || null
-    const language = getSetting('general.language') ?? null
+    const avatarSeed = getSetting('profile.avatar_seed', userId) || null
+    const language = getSetting('general.language', userId) ?? null
     reply.send({ account_name: accountName, avatar_seed: avatarSeed, language, email: authEmail })
   })
 
@@ -138,42 +139,45 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
         reply.status(400).send({ error: 'No fields to update' })
         return
       }
+      const userId = getRequestUserId(request)
       if (body.account_name !== undefined) {
         const name = body.account_name.trim()
         if (!name) {
           reply.status(400).send({ error: 'account_name must not be empty' })
           return
         }
-        upsertSetting('profile.account_name', name)
+        upsertSetting('profile.account_name', name, userId)
       }
       if (body.avatar_seed !== undefined) {
-        upsertSetting('profile.avatar_seed', body.avatar_seed || '')
+        upsertSetting('profile.avatar_seed', body.avatar_seed || '', userId)
       }
       if (body.language !== undefined) {
-        upsertSetting('general.language', body.language)
+        upsertSetting('general.language', body.language, userId)
       }
-      const accountName = getSetting('profile.account_name')!
-      const avatarSeed = getSetting('profile.avatar_seed') || null
-      const language = getSetting('general.language') ?? null
+      const accountName = getSetting('profile.account_name', userId)!
+      const avatarSeed = getSetting('profile.avatar_seed', userId) || null
+      const language = getSetting('general.language', userId) ?? null
       reply.send({ account_name: accountName, avatar_seed: avatarSeed, language })
     },
   )
 
   // --- Preferences endpoints ---
 
-  api.get('/api/settings/preferences', async (_request, reply) => {
+  api.get('/api/settings/preferences', async (request, reply) => {
+    const userId = getRequestUserId(request)
     const result: Record<string, string | null> = {}
     for (const key of PREF_KEYS) {
-      result[key] = getSetting(key) ?? null
+      result[key] = getSetting(key, userId) ?? null
     }
     reply.send(result)
   })
 
   const handlePrefsUpdate = async (request: FastifyRequest, reply: FastifyReply) => {
     const body = request.body as Record<string, unknown> // dynamic keys, validated per-field below
+    const userId = getRequestUserId(request)
 
     // Validate provider-model consistency before saving
-    const validationError = validateProviderModel(body)
+    const validationError = validateProviderModel(body, userId)
     if (validationError) {
       reply.status(400).send({ error: validationError })
       return
@@ -184,7 +188,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
       if (body[key] === undefined) continue
       const value = String(body[key])
       if (value === '') {
-        deleteSetting(key)
+        deleteSetting(key, userId)
         updated = true
         continue
       }
@@ -212,7 +216,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
           reply.status(400).send({ error: 'Invalid keybindings: must be valid JSON' })
           return
         }
-        upsertSetting(key, value)
+        upsertSetting(key, value, userId)
         updated = true
         continue
       }
@@ -223,9 +227,9 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
         if (modelKeyPair) {
           const provider = body[modelKeyPair.providerKey] !== undefined
             ? String(body[modelKeyPair.providerKey])
-            : getSetting(modelKeyPair.providerKey)
+            : getSetting(modelKeyPair.providerKey, userId)
           if (provider === 'ollama' || provider === 'openai') {
-            upsertSetting(key, value)
+            upsertSetting(key, value, userId)
             updated = true
             continue
           }
@@ -241,7 +245,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
           return
         }
       }
-      upsertSetting(key, value)
+      upsertSetting(key, value, userId)
       updated = true
     }
     if (!updated) {
@@ -250,7 +254,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     }
     const result: Record<string, string | null> = {}
     for (const key of PREF_KEYS) {
-      result[key] = getSetting(key) ?? null
+      result[key] = getSetting(key, userId) ?? null
     }
     reply.send(result)
   }
@@ -568,7 +572,8 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
       reply.status(400).send({ error: `Unknown provider: ${provider}` })
       return
     }
-    reply.send({ configured: !!getSetting(settingKey) })
+    const userId = getRequestUserId(request)
+    reply.send({ configured: !!getSetting(settingKey, userId) })
   })
 
   api.post('/api/settings/api-keys/:provider', { preHandler: [requireJson] }, async (request, reply) => {
@@ -579,11 +584,12 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
       return
     }
     const { apiKey } = ApiKeyBody.parse(request.body)
+    const userId = getRequestUserId(request)
     if (!apiKey || apiKey.trim() === '') {
-      deleteSetting(settingKey)
+      deleteSetting(settingKey, userId)
       reply.send({ ok: true, configured: false })
     } else {
-      upsertSetting(settingKey, apiKey.trim())
+      upsertSetting(settingKey, apiKey.trim(), userId)
       reply.send({ ok: true, configured: true })
     }
   })

@@ -10,8 +10,8 @@ import {
 } from '@simplewebauthn/server'
 import type { AuthenticatorTransportFuture, RegistrationResponseJSON, AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { z } from 'zod'
-import { getDb, getSetting, upsertSetting } from './db.js'
-import { requireAuth, getOrigin, getRpID, getCredentialCount } from './auth.js'
+import { getDb, getOwnerCount, getSetting, getUserById, recordUserLogin, upsertSetting } from './db.js'
+import { requireAuth, getOrigin, getRequestIdentity, getRpID, getCredentialCount, requireRoles } from './auth.js'
 import { isGitHubOAuthEnabled } from './oauthRoutes.js'
 import { TtlStore } from './lib/ttl-store.js'
 import { logger } from './logger.js'
@@ -74,6 +74,7 @@ function consumeChallenge(key: string): string | null {
 
 interface CredentialRow {
   id: number
+  user_id: number | null
   credential_id: string
   public_key: Buffer
   counter: number
@@ -84,9 +85,15 @@ interface CredentialRow {
   created_at: string
 }
 
-function getCredentials(): CredentialRow[] {
+function signUserToken(app: FastifyInstance, user: { id: number; role: string; token_version: number }): string {
+  return app.jwt.sign({ sub: user.id, role: user.role, token_version: user.token_version })
+}
+
+function getCredentials(userId?: number | null): CredentialRow[] {
   const db = getDb()
-  return db.prepare('SELECT * FROM credentials ORDER BY created_at ASC').all() as CredentialRow[]
+  return userId == null
+    ? db.prepare('SELECT * FROM credentials ORDER BY created_at ASC').all() as CredentialRow[]
+    : db.prepare('SELECT * FROM credentials WHERE user_id = ? OR user_id IS NULL ORDER BY created_at ASC').all(userId) as CredentialRow[]
 }
 
 function getCredentialByCredentialId(credentialId: string): CredentialRow | undefined {
@@ -104,13 +111,12 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/auth/methods — public
   app.get('/api/auth/methods', async (_request, reply) => {
-    const db = getDb()
-    const userCount = (db.prepare('SELECT COUNT(*) AS cnt FROM users').get() as { cnt: number }).cnt
+    const ownerCount = getOwnerCount()
     const passwordEnabled = getSetting('auth.password_enabled') !== '0'
     const passkeyCount = getCredentialCount()
     const githubEnabled = isGitHubOAuthEnabled()
     reply.send({
-      setup_required: userCount === 0,
+      setup_required: ownerCount === 0,
       password: { enabled: passwordEnabled },
       passkey: { enabled: passkeyCount > 0, count: passkeyCount },
       github: { enabled: githubEnabled },
@@ -118,8 +124,8 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // GET /api/auth/passkeys — requires auth (list registered passkeys)
-  app.get('/api/auth/passkeys', { preHandler: [requireAuth] }, async (_request, reply) => {
-    const creds = getCredentials()
+  app.get('/api/auth/passkeys', { preHandler: [requireAuth] }, async (request, reply) => {
+    const creds = getCredentials(getRequestIdentity(request)?.userId)
     reply.send(creds.map(c => ({
       id: c.id,
       credential_id: c.credential_id,
@@ -133,12 +139,14 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/register/options — requires auth
   app.get('/api/auth/register/options', { preHandler: [requireAuth] }, async (request, reply) => {
     const rpID = getRpID(request)
-    const existingCreds = getCredentials()
+    const identity = getRequestIdentity(request)
+    const existingCreds = getCredentials(identity?.userId)
 
     const options = await generateRegistrationOptions({
       rpName: 'Oksskolten',
       rpID,
-      userName: request.authUser || 'user',
+      userName: identity?.email || request.authUser || 'user',
+      userID: new TextEncoder().encode(String(identity?.userId ?? identity?.email ?? 'user')),
       excludeCredentials: existingCreds.map(c => ({
         id: c.credential_id,
         transports: c.transports ? JSON.parse(c.transports) as AuthenticatorTransportFuture[] : undefined,
@@ -181,10 +189,12 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
       const { credential, credentialDeviceType, credentialBackedUp, aaguid } = verification.registrationInfo
 
       const db = getDb()
+      const identity = getRequestIdentity(request)
       db.prepare(`
-        INSERT INTO credentials (credential_id, public_key, counter, device_type, backed_up, transports, aaguid)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO credentials (user_id, credential_id, public_key, counter, device_type, backed_up, transports, aaguid)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
+        identity?.userId ?? null,
         credential.id,
         Buffer.from(credential.publicKey),
         credential.counter,
@@ -264,15 +274,18 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
         .run(verification.authenticationInfo.newCounter, credentialId)
 
       // Issue JWT (same as password login)
-      const user = db.prepare('SELECT email, token_version FROM users LIMIT 1').get() as
-        | { email: string; token_version: number }
+      const user = credRow.user_id == null
+        ? undefined
+        : db.prepare('SELECT id, role, status, token_version FROM users WHERE id = ?').get(credRow.user_id) as
+          | { id: number; role: string; status: string; token_version: number }
         | undefined
 
-      if (!user) {
+      if (!user || user.status !== 'active') {
         return reply.status(500).send({ error: 'No user configured' })
       }
 
-      const token = app.jwt.sign({ email: user.email, token_version: user.token_version })
+      recordUserLogin(user.id)
+      const token = signUserToken(app, user)
       reply.send({ ok: true, token })
     } catch (err) {
       return reply.status(400).send({ error: err instanceof Error ? err.message : 'Authentication failed' })
@@ -285,10 +298,12 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
     if (!params) return
     const numId = params.id
 
+    const identity = getRequestIdentity(request)
+
     // Lockout prevention: don't delete the last passkey if no other auth method is enabled
     const passwordEnabled = getSetting('auth.password_enabled') !== '0'
-    const passkeyCount = getCredentialCount()
-    const githubEnabled = isGitHubOAuthEnabled()
+    const passkeyCount = getCredentials(identity?.userId).length
+    const githubEnabled = isGitHubOAuthEnabled() && !!getUserById(identity?.userId ?? -1)?.github_login
 
     if (!passwordEnabled && !githubEnabled && passkeyCount <= 1) {
       return reply.status(400).send({
@@ -297,7 +312,7 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const db = getDb()
-    const result = db.prepare('DELETE FROM credentials WHERE id = ?').run(numId)
+    const result = db.prepare('DELETE FROM credentials WHERE id = ? AND (user_id = ? OR user_id IS NULL)').run(numId, identity?.userId ?? null)
     if (result.changes === 0) {
       return reply.status(404).send({ error: 'Passkey not found' })
     }
@@ -306,7 +321,7 @@ export async function passkeyRoutes(app: FastifyInstance): Promise<void> {
   })
 
   // POST /api/auth/password/toggle — requires auth
-  app.post('/api/auth/password/toggle', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.post('/api/auth/password/toggle', { preHandler: [requireAuth, requireRoles(['owner', 'admin'])] }, async (request, reply) => {
     const body = parseOrBadRequest(PasswordToggleBody, request.body, reply)
     if (!body) return
     const wantEnabled = body.enabled

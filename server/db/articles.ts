@@ -6,6 +6,7 @@ import { RETRY_MAX_ATTEMPTS, RETRY_BATCH_LIMIT } from '../fetcher/util.js'
 import { deleteArticleImages } from '../fetcher/article-images.js'
 import { logger } from '../logger.js'
 import { detectArticleKindForFeed, isArticleKind, type ArticleKind } from '../../shared/article-kind.js'
+import { getCurrentUserId } from '../identity.js'
 
 const log = logger.child('retention')
 
@@ -14,9 +15,13 @@ function normalizeUrl(raw: string): string {
   try { return new URL(raw).href } catch { return raw }
 }
 
+function resolveUserId(userId?: number | null): number | null {
+  return userId ?? getCurrentUserId()
+}
+
 function buildMeiliDoc(id: number): MeiliArticleDoc | null {
   const row = getDb().prepare(`
-    SELECT id, feed_id, category_id, title,
+    SELECT id, user_id, feed_id, category_id, title,
            COALESCE(full_text, '') AS full_text,
            COALESCE(full_text_translated, '') AS full_text_translated,
            lang,
@@ -112,9 +117,16 @@ export function getArticles(opts: {
   limit: number
   offset: number
   smartFloor?: boolean
+  userId?: number | null
 }): { articles: ArticleListItem[]; total: number; totalWithoutFloor?: number } {
   const conditions: string[] = []
   const params: Record<string, unknown> = {}
+  const scopedUserId = resolveUserId(opts.userId)
+
+  if (scopedUserId != null) {
+    conditions.push('a.user_id = @userId')
+    params.userId = scopedUserId
+  }
 
   if (opts.feedId) {
     conditions.push('a.feed_id = @feedId')
@@ -224,71 +236,103 @@ export function getArticles(opts: {
   return { articles, total, ...(totalWithoutFloor != null && totalWithoutFloor > total ? { totalWithoutFloor } : {}) }
 }
 
-export function getArticleByUrl(url: string): ArticleDetail | undefined {
+export function getArticleByUrl(url: string, userId?: number | null): ArticleDetail | undefined {
+  const scopedUserId = resolveUserId(userId)
   return mapArticleDetail(getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url, f.type AS feed_type,
            a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
            ${hasVideoExpr('a.')} AS has_video,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
-           (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
+            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.url = ?
-  `).get(normalizeUrl(url)) as ArticleDetail | undefined)
+      ${scopedUserId == null ? '' : 'AND a.user_id = ?'}
+  `).get(...(scopedUserId == null ? [normalizeUrl(url)] : [normalizeUrl(url), scopedUserId])) as ArticleDetail | undefined)
 }
 
-export function getArticleById(id: number): ArticleDetail | undefined {
+export function getArticleById(id: number, userId?: number | null): ArticleDetail | undefined {
+  const scopedUserId = resolveUserId(userId)
   return mapArticleDetail(getDb().prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url, f.type AS feed_type,
            a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
            ${hasVideoExpr('a.')} AS has_video,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
-           (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
+            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.id = ?
-  `).get(id) as ArticleDetail | undefined)
+      ${scopedUserId == null ? '' : 'AND a.user_id = ?'}
+  `).get(...(scopedUserId == null ? [id] : [id, scopedUserId])) as ArticleDetail | undefined)
 }
 
 export function markArticleSeen(
   id: number,
   seen: boolean,
+  userId?: number | null,
 ): { seen_at: string | null; read_at: string | null } | undefined {
+  const scopedUserId = resolveUserId(userId)
   const row = getDb().transaction(() => {
     if (seen) {
-      getDb().prepare("UPDATE articles SET seen_at = datetime('now') WHERE id = ? AND seen_at IS NULL").run(id)
+      const sql = scopedUserId == null
+        ? "UPDATE articles SET seen_at = datetime('now') WHERE id = ? AND seen_at IS NULL"
+        : "UPDATE articles SET seen_at = datetime('now') WHERE id = ? AND user_id = ? AND seen_at IS NULL"
+      getDb().prepare(sql).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
     } else {
-      getDb().prepare('UPDATE articles SET seen_at = NULL, read_at = NULL WHERE id = ?').run(id)
-      updateScoreDb(id)
+      const sql = scopedUserId == null
+        ? 'UPDATE articles SET seen_at = NULL, read_at = NULL WHERE id = ?'
+        : 'UPDATE articles SET seen_at = NULL, read_at = NULL WHERE id = ? AND user_id = ?'
+      getDb().prepare(sql).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
     }
-    return getDb().prepare('SELECT seen_at, read_at FROM articles WHERE id = ?').get(id) as { seen_at: string | null; read_at: string | null } | undefined
+    const sql = scopedUserId == null
+      ? 'SELECT seen_at, read_at FROM articles WHERE id = ?'
+      : 'SELECT seen_at, read_at FROM articles WHERE id = ? AND user_id = ?'
+    return getDb().prepare(sql).get(...(scopedUserId == null ? [id] : [id, scopedUserId])) as { seen_at: string | null; read_at: string | null } | undefined
   })()
-  if (!seen) syncScoreToSearch(id)
-  syncArticleFiltersToSearch([{ id, is_unread: !seen }])
   if (!row) return undefined
+  if (!seen) {
+    updateScoreDb(id)
+    syncScoreToSearch(id)
+  }
+  syncArticleFiltersToSearch([{ id, is_unread: !seen }])
   return { seen_at: row.seen_at, read_at: row.read_at }
 }
 
-export function markArticlesSeen(ids: number[]): { updated: number } {
+export function markArticlesSeen(ids: number[], userId?: number | null): { updated: number } {
   if (ids.length === 0) return { updated: 0 }
+  const scopedUserId = resolveUserId(userId)
   const placeholders = ids.map(() => '?').join(',')
   const result = getDb().prepare(
-    `UPDATE articles SET seen_at = datetime('now') WHERE id IN (${placeholders}) AND seen_at IS NULL`,
-  ).run(...ids)
+    `UPDATE articles SET seen_at = datetime('now')
+     WHERE id IN (${placeholders})
+       ${scopedUserId == null ? '' : 'AND user_id = ?'}
+       AND seen_at IS NULL`,
+  ).run(...ids, ...(scopedUserId == null ? [] : [scopedUserId]))
   if (result.changes > 0) {
     syncArticleFiltersToSearch(ids.map(id => ({ id, is_unread: false })))
   }
   return { updated: result.changes }
 }
 
-export function markAllSeenByFeed(feedId: number): { updated: number } {
+export function markAllSeenByFeed(feedId: number, userId?: number | null): { updated: number } {
+  const scopedUserId = resolveUserId(userId)
   // Collect affected IDs before update for search sync
   const affectedIds = (getDb().prepare(
-    'SELECT id FROM active_articles WHERE feed_id = ? AND seen_at IS NULL',
-  ).all(feedId) as { id: number }[]).map(r => r.id)
-  const result = getDb().prepare("UPDATE articles SET seen_at = datetime('now') WHERE feed_id = ? AND seen_at IS NULL AND purged_at IS NULL").run(feedId)
+    `SELECT id FROM active_articles
+     WHERE feed_id = ?
+       ${scopedUserId == null ? '' : 'AND user_id = ?'}
+       AND seen_at IS NULL`,
+  ).all(...(scopedUserId == null ? [feedId] : [feedId, scopedUserId])) as { id: number }[]).map(r => r.id)
+  const result = getDb().prepare(`
+    UPDATE articles
+    SET seen_at = datetime('now')
+    WHERE feed_id = ?
+      ${scopedUserId == null ? '' : 'AND user_id = ?'}
+      AND seen_at IS NULL
+      AND purged_at IS NULL
+  `).run(...(scopedUserId == null ? [feedId] : [feedId, scopedUserId]))
   if (affectedIds.length > 0) {
     syncArticleFiltersToSearch(affectedIds.map(id => ({ id, is_unread: false })))
   }
@@ -298,68 +342,114 @@ export function markAllSeenByFeed(feedId: number): { updated: number } {
 export function markArticleLiked(
   id: number,
   liked: boolean,
+  userId?: number | null,
 ): { liked_at: string | null } | undefined {
+  const scopedUserId = resolveUserId(userId)
   const row = getDb().transaction(() => {
     if (liked) {
-      getDb().prepare("UPDATE articles SET liked_at = datetime('now') WHERE id = ? AND liked_at IS NULL").run(id)
+      const sql = scopedUserId == null
+        ? "UPDATE articles SET liked_at = datetime('now') WHERE id = ? AND liked_at IS NULL"
+        : "UPDATE articles SET liked_at = datetime('now') WHERE id = ? AND user_id = ? AND liked_at IS NULL"
+      getDb().prepare(sql).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
     } else {
-      getDb().prepare('UPDATE articles SET liked_at = NULL WHERE id = ?').run(id)
+      const sql = scopedUserId == null
+        ? 'UPDATE articles SET liked_at = NULL WHERE id = ?'
+        : 'UPDATE articles SET liked_at = NULL WHERE id = ? AND user_id = ?'
+      getDb().prepare(sql).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
     }
-    updateScoreDb(id)
-    return getDb().prepare('SELECT liked_at FROM articles WHERE id = ?').get(id) as { liked_at: string | null } | undefined
+    const sql = scopedUserId == null
+      ? 'SELECT liked_at FROM articles WHERE id = ?'
+      : 'SELECT liked_at FROM articles WHERE id = ? AND user_id = ?'
+    return getDb().prepare(sql).get(...(scopedUserId == null ? [id] : [id, scopedUserId])) as { liked_at: string | null } | undefined
   })()
+  if (!row) return undefined
+  updateScoreDb(id)
   syncScoreToSearch(id)
   syncArticleFiltersToSearch([{ id, is_liked: liked }])
-  if (!row) return undefined
   return { liked_at: row.liked_at }
 }
 
-export function getLikeCount(): number {
-  const row = getDb().prepare('SELECT COUNT(*) AS cnt FROM active_articles WHERE liked_at IS NOT NULL').get() as { cnt: number }
+export function getLikeCount(userId?: number | null): number {
+  const scopedUserId = resolveUserId(userId)
+  const row = getDb().prepare(`
+    SELECT COUNT(*) AS cnt
+    FROM active_articles
+    WHERE liked_at IS NOT NULL
+      ${scopedUserId == null ? '' : 'AND user_id = ?'}
+  `).get(...(scopedUserId == null ? [] : [scopedUserId])) as { cnt: number }
   return row.cnt
 }
 
 export function markArticleBookmarked(
   id: number,
   bookmarked: boolean,
+  userId?: number | null,
 ): { bookmarked_at: string | null } | undefined {
+  const scopedUserId = resolveUserId(userId)
   const row = getDb().transaction(() => {
     if (bookmarked) {
-      getDb().prepare("UPDATE articles SET bookmarked_at = datetime('now') WHERE id = ? AND bookmarked_at IS NULL").run(id)
+      const sql = scopedUserId == null
+        ? "UPDATE articles SET bookmarked_at = datetime('now') WHERE id = ? AND bookmarked_at IS NULL"
+        : "UPDATE articles SET bookmarked_at = datetime('now') WHERE id = ? AND user_id = ? AND bookmarked_at IS NULL"
+      getDb().prepare(sql).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
     } else {
-      getDb().prepare('UPDATE articles SET bookmarked_at = NULL WHERE id = ?').run(id)
+      const sql = scopedUserId == null
+        ? 'UPDATE articles SET bookmarked_at = NULL WHERE id = ?'
+        : 'UPDATE articles SET bookmarked_at = NULL WHERE id = ? AND user_id = ?'
+      getDb().prepare(sql).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
     }
-    updateScoreDb(id)
-    return getDb().prepare('SELECT bookmarked_at FROM articles WHERE id = ?').get(id) as { bookmarked_at: string | null } | undefined
+    const sql = scopedUserId == null
+      ? 'SELECT bookmarked_at FROM articles WHERE id = ?'
+      : 'SELECT bookmarked_at FROM articles WHERE id = ? AND user_id = ?'
+    return getDb().prepare(sql).get(...(scopedUserId == null ? [id] : [id, scopedUserId])) as { bookmarked_at: string | null } | undefined
   })()
+  if (!row) return undefined
+  updateScoreDb(id)
   syncScoreToSearch(id)
   syncArticleFiltersToSearch([{ id, is_bookmarked: bookmarked }])
-  if (!row) return undefined
   return { bookmarked_at: row.bookmarked_at }
 }
 
-export function getBookmarkCount(): number {
-  const row = getDb().prepare('SELECT COUNT(*) AS cnt FROM active_articles WHERE bookmarked_at IS NOT NULL').get() as { cnt: number }
+export function getBookmarkCount(userId?: number | null): number {
+  const scopedUserId = resolveUserId(userId)
+  const row = getDb().prepare(`
+    SELECT COUNT(*) AS cnt
+    FROM active_articles
+    WHERE bookmarked_at IS NOT NULL
+      ${scopedUserId == null ? '' : 'AND user_id = ?'}
+  `).get(...(scopedUserId == null ? [] : [scopedUserId])) as { cnt: number }
   return row.cnt
 }
 
 export function recordArticleRead(
   id: number,
+  userId?: number | null,
 ): { seen_at: string | null; read_at: string | null } | undefined {
+  const scopedUserId = resolveUserId(userId)
   const row = getDb().transaction(() => {
     getDb().prepare(
-      "UPDATE articles SET read_at = datetime('now'), seen_at = COALESCE(seen_at, datetime('now')) WHERE id = ?",
-    ).run(id)
-    updateScoreDb(id)
-    return getDb().prepare('SELECT seen_at, read_at FROM articles WHERE id = ?').get(id) as { seen_at: string | null; read_at: string | null } | undefined
+      `UPDATE articles
+       SET read_at = datetime('now'), seen_at = COALESCE(seen_at, datetime('now'))
+       WHERE id = ?
+         ${scopedUserId == null ? '' : 'AND user_id = ?'}`,
+    ).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
+    return getDb().prepare(
+      `SELECT seen_at, read_at
+       FROM articles
+       WHERE id = ?
+         ${scopedUserId == null ? '' : 'AND user_id = ?'}`,
+    ).get(...(scopedUserId == null ? [id] : [id, scopedUserId])) as { seen_at: string | null; read_at: string | null } | undefined
   })()
+  if (!row) return undefined
+  updateScoreDb(id)
   syncScoreToSearch(id)
   syncArticleFiltersToSearch([{ id, is_unread: false }])
-  return row ? { seen_at: row.seen_at, read_at: row.read_at } : undefined
+  return { seen_at: row.seen_at, read_at: row.read_at }
 }
 
 export function insertArticle(data: {
   feed_id: number
+  user_id?: number | null
   title: string
   url: string
   published_at: string | null
@@ -373,13 +463,17 @@ export function insertArticle(data: {
   og_image?: string | null
   last_error?: string | null
 }): number {
+  const inferredUserId = data.user_id
+    ?? resolveUserId()
+    ?? (getDb().prepare('SELECT user_id FROM feeds WHERE id = ?').get(data.feed_id) as { user_id: number | null } | undefined)?.user_id
   const info = runNamed(`
-    INSERT INTO articles (feed_id, category_id, title, url, article_kind, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
-    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @article_kind, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
+    INSERT INTO articles (user_id, feed_id, category_id, title, url, article_kind, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
+    VALUES (@user_id, @feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @article_kind, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
   `, {
+    user_id: inferredUserId ?? null,
     feed_id: data.feed_id,
     title: data.title,
-    url: data.url,
+    url: normalizeUrl(data.url),
     article_kind: data.article_kind ?? null,
     published_at: data.published_at,
     lang: data.lang ?? null,
@@ -412,7 +506,9 @@ export function updateArticleContent(
     retry_count?: number
     last_retry_at?: string | null
   },
+  userId?: number | null,
 ): void {
+  const scopedUserId = resolveUserId(userId)
   const fields: string[] = []
   const params: Record<string, unknown> = { id: articleId }
 
@@ -423,18 +519,24 @@ export function updateArticleContent(
     }
   }
   if (fields.length === 0) return
-  runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id`, params)
+  if (scopedUserId != null) {
+    params.user_id = scopedUserId
+    runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id AND user_id = @user_id`, params)
+  } else {
+    runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id`, params)
+  }
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
 }
 
-export function getExistingArticleUrls(urls: string[]): Set<string> {
+export function getExistingArticleUrls(urls: string[], userId?: number | null): Set<string> {
   if (urls.length === 0) return new Set()
+  const scopedUserId = resolveUserId(userId)
   const normalized = urls.map(normalizeUrl)
   const placeholders = normalized.map(() => '?').join(',')
   const rows = getDb().prepare(
-    `SELECT url FROM articles WHERE url IN (${placeholders})`,
-  ).all(...normalized) as { url: string }[]
+    `SELECT url FROM articles WHERE url IN (${placeholders}) ${scopedUserId == null ? '' : 'AND user_id = ?'}`,
+  ).all(...normalized, ...(scopedUserId == null ? [] : [scopedUserId])) as { url: string }[]
   return new Set(rows.map(r => r.url))
 }
 
@@ -560,12 +662,17 @@ export function getRetryStats(maxAttempts = RETRY_MAX_ATTEMPTS): RetryStats {
 export function getArticlesByIds(
   ids: number[],
   opts?: { unread?: boolean; liked?: boolean; bookmarked?: boolean },
+  userId?: number | null,
 ): ArticleListItem[] {
   if (ids.length === 0) return []
+  const scopedUserId = resolveUserId(userId)
   const placeholders = ids.map(() => '?').join(',')
   const orderCase = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(' ')
 
   const conditions: string[] = [`a.id IN (${placeholders})`]
+  if (scopedUserId != null) {
+    conditions.push('a.user_id = ?')
+  }
   if (opts?.unread !== undefined) {
     conditions.push(opts.unread ? 'a.seen_at IS NULL' : 'a.seen_at IS NOT NULL')
   }
@@ -584,7 +691,7 @@ export function getArticlesByIds(
     JOIN feeds f ON a.feed_id = f.id
     ${where}
     ORDER BY CASE a.id ${orderCase} END
-  `).all(...ids).map((row) => mapArticleListItem(row as ArticleListItem))
+  `).all(...ids, ...(scopedUserId == null ? [] : [scopedUserId])).map((row) => mapArticleListItem(row as ArticleListItem))
 }
 
 // --- Search queries ---
@@ -600,9 +707,16 @@ export function searchArticles(opts: {
   until?: string
   limit?: number
   sort?: 'published_at' | 'score'
+  userId?: number | null
 }): ArticleListItem[] {
   const conditions: string[] = []
   const params: Record<string, unknown> = {}
+  const scopedUserId = resolveUserId(opts.userId)
+
+  if (scopedUserId != null) {
+    conditions.push('a.user_id = @user_id')
+    params.user_id = scopedUserId
+  }
 
   if (opts.feed_id) {
     conditions.push('a.feed_id = @feed_id')
@@ -672,8 +786,11 @@ export function clearImagesArchived(articleId: number): void {
   getDb().prepare('UPDATE articles SET images_archived_at = NULL WHERE id = ?').run(articleId)
 }
 
-export function deleteArticle(id: number): boolean {
-  const result = getDb().prepare('DELETE FROM articles WHERE id = ?').run(id)
+export function deleteArticle(id: number, userId?: number | null): boolean {
+  const scopedUserId = resolveUserId(userId)
+  const result = getDb().prepare(
+    `DELETE FROM articles WHERE id = ? ${scopedUserId == null ? '' : 'AND user_id = ?'}`,
+  ).run(...(scopedUserId == null ? [id] : [id, scopedUserId]))
   if (result.changes > 0) deleteArticleFromSearch(id)
   return result.changes > 0
 }
@@ -681,9 +798,16 @@ export function deleteArticle(id: number): boolean {
 export function getReadingStats(opts?: {
   since?: string
   until?: string
+  userId?: number | null
 }): { total: number; read: number; unread: number; by_feed: { feed_id: number; feed_name: string; total: number; read: number; unread: number }[] } {
   const conditions: string[] = []
   const params: Record<string, unknown> = {}
+  const scopedUserId = resolveUserId(opts?.userId)
+
+  if (scopedUserId != null) {
+    conditions.push('a.user_id = @user_id')
+    params.user_id = scopedUserId
+  }
 
   if (opts?.since) {
     conditions.push('a.published_at >= @since')

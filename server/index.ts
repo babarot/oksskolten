@@ -42,7 +42,6 @@ if (!getSetting('system.article_kind_backfill_v1')) {
   upsertSetting('system.article_kind_backfill_v1', new Date().toISOString())
   log.info({ updated }, 'Backfilled legacy X article kinds')
 }
-
 // --- Dev seed data ---
 if (process.env.NODE_ENV === 'development') {
   const { seedDevData } = await import('./seed.js')

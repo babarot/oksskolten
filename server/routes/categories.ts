@@ -7,7 +7,7 @@ import {
   deleteCategory,
   markAllSeenByCategory,
 } from '../db.js'
-import { requireJson } from '../auth.js'
+import { requireJson, getRequestUserId } from '../auth.js'
 import { NumericIdParams, parseOrBadRequest } from '../lib/validation.js'
 
 const CreateCategoryBody = z.object({
@@ -21,8 +21,9 @@ const UpdateCategoryBody = z.object({
 })
 
 export async function categoryRoutes(api: FastifyInstance): Promise<void> {
-  api.get('/api/categories', async (_request, reply) => {
-    const categories = getCategories()
+  api.get('/api/categories', async (request, reply) => {
+    const userId = getRequestUserId(request)
+    const categories = getCategories(userId)
     reply.send({ categories })
   })
 
@@ -32,7 +33,8 @@ export async function categoryRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = parseOrBadRequest(CreateCategoryBody, request.body, reply)
       if (!body) return
-      const category = createCategory(body.name.trim())
+      const userId = getRequestUserId(request)
+      const category = createCategory(body.name.trim(), userId)
       reply.status(201).send(category)
     },
   )
@@ -45,7 +47,8 @@ export async function categoryRoutes(api: FastifyInstance): Promise<void> {
       if (!params) return
       const body = parseOrBadRequest(UpdateCategoryBody, request.body, reply)
       if (!body) return
-      const category = updateCategory(params.id, body)
+      const userId = getRequestUserId(request)
+      const category = updateCategory(params.id, body, userId)
       if (!category) {
         reply.status(404).send({ error: 'Category not found' })
         return
@@ -59,7 +62,8 @@ export async function categoryRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const deleted = deleteCategory(params.id)
+      const userId = getRequestUserId(request)
+      const deleted = deleteCategory(params.id, userId)
       if (!deleted) {
         reply.status(404).send({ error: 'Category not found' })
         return
@@ -73,7 +77,8 @@ export async function categoryRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const result = markAllSeenByCategory(params.id)
+      const userId = getRequestUserId(request)
+      const result = markAllSeenByCategory(params.id, userId)
       reply.send(result)
     },
   )

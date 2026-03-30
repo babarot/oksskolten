@@ -21,7 +21,7 @@ import {
   getCategories,
   createCategory,
 } from '../db.js'
-import { requireJson } from '../auth.js'
+import { requireJson, getRequestUserId } from '../auth.js'
 import { fetchSingleFeed, discoverRssUrl } from '../fetcher.js'
 import { queryRssBridge, inferCssSelectorBridge } from '../rss-bridge.js'
 import { parseOpml, generateOpml } from '../opml.js'
@@ -51,11 +51,12 @@ const UpdateFeedBody = z.object({
 })
 
 export async function feedRoutes(api: FastifyInstance): Promise<void> {
-  api.get('/api/feeds', async (_request, reply) => {
-    const feeds = getFeeds()
-    const bookmark_count = getBookmarkCount()
-    const like_count = getLikeCount()
-    const clipFeed = getClipFeed()
+  api.get('/api/feeds', async (request, reply) => {
+    const userId = getRequestUserId(request)
+    const feeds = getFeeds(userId)
+    const bookmark_count = getBookmarkCount(userId)
+    const like_count = getLikeCount(userId)
+    const clipFeed = getClipFeed(userId)
     const clip_feed_id = clipFeed?.id ?? null
     reply.send({ feeds, bookmark_count, like_count, clip_feed_id })
   })
@@ -77,8 +78,9 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const body = parseOrBadRequest(CreateFeedBody, request.body, reply)
       if (!body) return
+      const userId = getRequestUserId(request)
 
-      if (getFeedByUrl(body.url)) {
+      if (getFeedByUrl(body.url, userId)) {
         reply.status(409).send({ error: 'Feed URL already exists' })
         return
       }
@@ -146,7 +148,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
           rss_bridge_url: rssBridgeUrl,
           category_id: body.category_id ?? null,
           requires_js_challenge: requiresJsChallenge ? 1 : 0,
-        })
+        }, userId)
 
         // Fire-and-forget: fetch articles for the new feed
         if (feed.rss_url || feed.rss_bridge_url) {
@@ -172,14 +174,15 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
       if (!params) return
       const body = parseOrBadRequest(UpdateFeedBody, request.body, reply)
       if (!body) return
+      const userId = getRequestUserId(request)
 
-      const feed = updateFeed(params.id, body)
+      const feed = updateFeed(params.id, body, userId)
       if (!feed) {
         reply.status(404).send({ error: 'Feed not found' })
         return
       }
 
-      const feeds = getFeeds()
+      const feeds = getFeeds(userId)
       const withCounts = feeds.find(f => f.id === feed.id)
       reply.send(withCounts || feed)
     },
@@ -206,7 +209,8 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const feed = getFeedById(params.id)
+      const userId = getRequestUserId(request)
+      const feed = getFeedById(params.id, userId)
       if (!feed) {
         reply.status(404).send({ error: 'Feed not found' })
         return
@@ -215,7 +219,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
         reply.status(403).send({ error: 'Cannot delete the clip feed' })
         return
       }
-      const deleted = deleteFeed(params.id)
+      const deleted = deleteFeed(params.id, userId)
       if (!deleted) {
         reply.status(404).send({ error: 'Feed not found' })
         return
@@ -231,7 +235,8 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const feed = getFeedById(params.id)
+      const userId = getRequestUserId(request)
+      const feed = getFeedById(params.id, userId)
       if (!feed || feed.disabled) {
         reply.status(404).send({ error: 'Feed not found or disabled' })
         return
@@ -254,7 +259,8 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const feed = getFeedById(params.id)
+      const userId = getRequestUserId(request)
+      const feed = getFeedById(params.id, userId)
       if (!feed) {
         reply.status(404).send({ error: 'Feed not found' })
         return
@@ -296,10 +302,10 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
         icon_url: iconUrl,
         rss_url: rssUrl,
         rss_bridge_url: rssBridgeUrl,
-      })
+      }, userId)
 
       // Fire-and-forget: fetch articles with updated config
-      const refreshedFeed = getFeedById(params.id)
+      const refreshedFeed = getFeedById(params.id, userId)
       if (refreshedFeed && (rssUrl || rssBridgeUrl)) {
         fetchSingleFeed(refreshedFeed).catch(err => {
           log.error(`Re-detect fetch for ${refreshedFeed.name} failed:`, err)
@@ -316,12 +322,13 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const feed = getFeedById(params.id)
+      const userId = getRequestUserId(request)
+      const feed = getFeedById(params.id, userId)
       if (!feed) {
         reply.status(404).send({ error: 'Feed not found' })
         return
       }
-      const metrics = getFeedMetrics(params.id)
+      const metrics = getFeedMetrics(params.id, userId)
       reply.send(metrics ?? { avg_content_length: null })
     },
   )
@@ -331,16 +338,18 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const params = parseOrBadRequest(NumericIdParams, request.params, reply)
       if (!params) return
-      const result = markAllSeenByFeed(params.id)
+      const userId = getRequestUserId(request)
+      const result = markAllSeenByFeed(params.id, userId)
       reply.send(result)
     },
   )
 
   // --- OPML export ---
 
-  api.get('/api/opml', async (_request, reply) => {
-    const feeds = getFeeds()
-    const categories = getCategories()
+  api.get('/api/opml', async (request, reply) => {
+    const userId = getRequestUserId(request)
+    const feeds = getFeeds(userId)
+    const categories = getCategories(userId)
     const xml = generateOpml(feeds, categories)
     reply
       .header('Content-Type', 'application/xml')
@@ -368,8 +377,9 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
       return
     }
 
+    const userId = getRequestUserId(request)
     const feeds = parsed.map((entry) => {
-      const existing = getFeedByUrl(entry.url)
+      const existing = getFeedByUrl(entry.url, userId)
       return {
         name: entry.name,
         url: entry.url,
@@ -423,14 +433,15 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
     const errors: string[] = []
     const importedFeeds: Feed[] = []
 
+    const importUserId = getRequestUserId(request)
     // Pre-fetch existing categories
-    const existingCategories = getCategories()
+    const existingCategories = getCategories(importUserId)
     const categoryByName = new Map(existingCategories.map(c => [c.name.toLowerCase(), c]))
 
     for (const entry of entries) {
       try {
         // Check for duplicate by url or rss_url
-        if (getFeedByUrl(entry.url)) {
+        if (getFeedByUrl(entry.url, importUserId)) {
           skipped++
           continue
         }
@@ -442,7 +453,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
           if (existing) {
             categoryId = existing.id
           } else {
-            const created = createCategory(entry.categoryName)
+            const created = createCategory(entry.categoryName, importUserId)
             categoryByName.set(entry.categoryName.toLowerCase(), created)
             categoryId = created.id
           }
@@ -453,7 +464,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
           url: entry.url,
           rss_url: entry.rssUrl,
           category_id: categoryId,
-        })
+        }, importUserId)
         importedFeeds.push(feed)
         imported++
       } catch (err) {

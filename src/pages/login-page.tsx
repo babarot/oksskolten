@@ -7,6 +7,7 @@ import { useDarkMode } from '../hooks/use-dark-mode'
 import { useTheme } from '../hooks/use-theme'
 import { Fingerprint, Github } from 'lucide-react'
 import { SetupPage } from './setup-page'
+import { InviteAcceptPage } from './invite-accept-page'
 
 interface AuthMethods {
   setup_required?: boolean
@@ -68,9 +69,21 @@ export function LoginPage({ onLogin }: { onLogin?: (token: string) => void }) {
     return <SetupPage onLogin={onLogin} />
   }
 
+  const inviteToken = window.location.pathname.startsWith('/invite/')
+    ? decodeURIComponent(window.location.pathname.slice('/invite/'.length))
+    : null
+
   const showPasskey = methods?.passkey?.enabled && methods.passkey.count > 0 && browserSupportsWebAuthn()
   const showGitHub = methods?.github?.enabled === true
   const showPassword = methods?.password?.enabled !== false
+
+  if (inviteToken) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-sidebar px-4 outline-none" ref={containerRef} tabIndex={-1}>
+        <InviteAcceptPage token={inviteToken} onLogin={onLogin} />
+      </div>
+    )
+  }
 
   async function handlePasskeyLogin() {
     setError(null)

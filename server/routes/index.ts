@@ -7,6 +7,7 @@ import { settingsRoutes } from './settings.js'
 import { adminRoutes } from './admin.js'
 import { apiKeyRoutes } from './apiKeys.js'
 import { statsRoutes } from './stats.js'
+import { userRoutes } from './users.js'
 
 export function registerApi(app: FastifyInstance): void {
   app.register(async function apiRoutes(api) {
@@ -20,5 +21,6 @@ export function registerApi(app: FastifyInstance): void {
     await api.register(adminRoutes)
     await api.register(apiKeyRoutes)
     await api.register(statsRoutes)
+    await api.register(userRoutes)
   })
 }

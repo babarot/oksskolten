@@ -12,11 +12,13 @@ import { GeneralTab } from './settings/general-tab'
 const AppearanceTab = lazy(() => import('./settings/appearance-tab').then(m => ({ default: m.AppearanceTab })))
 import { IntegrationTab } from './settings/integration-tab'
 import { DataTab } from './settings/data-tab'
+import { MembersTab } from './settings/members-tab'
 import { Separator } from '@/components/ui/separator'
+import { fetcher } from '../lib/fetcher'
 
 declare const __APP_VERSION__: string
 
-const TABS = ['general', 'appearance', 'integration', 'plugins', 'security', 'data', 'viewer', 'about'] as const
+const BASE_TABS = ['general', 'appearance', 'integration', 'plugins', 'security', 'data', 'viewer', 'about'] as const
 
 export function SettingsPage() {
   const { tab: tabParam } = useParams<{ tab?: string }>()
@@ -24,6 +26,10 @@ export function SettingsPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const settingsChunkVersion = '2026-03-29-2'
+  const { data: me } = useSWR<{ role?: 'owner' | 'admin' | 'member' }>('/api/me', fetcher)
+  const tabs = me?.role === 'owner' || me?.role === 'admin'
+    ? [...BASE_TABS, 'members']
+    : BASE_TABS
 
   return (
     <div className="bg-bg" data-settings-version={settingsChunkVersion}>
@@ -32,7 +38,7 @@ export function SettingsPage() {
       </div>
       <div className="max-w-5xl mx-auto flex flex-col md:flex-row">
         <nav className="flex gap-1 px-4 py-2 select-none md:hidden overflow-x-auto">
-          {TABS.map(key => (
+          {tabs.map(key => (
             <button
               key={key}
               onClick={() => navigate(`/settings/${key}`)}
@@ -42,13 +48,13 @@ export function SettingsPage() {
                   : 'text-muted hover:bg-hover-sidebar hover:text-text'
               }`}
             >
-              {t(`settings.${key}` as 'settings.general')}
+              {key === 'members' ? 'Members' : t(`settings.${key}` as 'settings.general')}
             </button>
           ))}
         </nav>
 
         <nav className="hidden md:block md:w-44 shrink-0 px-4 py-4 select-none space-y-1.5">
-          {TABS.map(key => (
+          {tabs.map(key => (
             <button
               key={key}
               onClick={() => navigate(`/settings/${key}`)}
@@ -58,7 +64,7 @@ export function SettingsPage() {
                   : 'text-muted hover:bg-hover-sidebar hover:text-text'
               }`}
             >
-              {t(`settings.${key}` as 'settings.general')}
+              {key === 'members' ? 'Members' : t(`settings.${key}` as 'settings.general')}
             </button>
           ))}
         </nav>
@@ -106,6 +112,8 @@ export function SettingsPage() {
           )}
 
           {tab === 'about' && <AboutTab />}
+
+          {tab === 'members' && <MembersTab />}
         </main>
       </div>
     </div>
