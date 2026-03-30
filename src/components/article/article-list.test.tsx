@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { LocaleContext } from '../../lib/i18n'
 import type { ArticleListItem } from '../../../shared/types'
@@ -127,6 +127,7 @@ function makeArticle(overrides: Partial<ArticleListItem> = {}): ArticleListItem 
     id: 1,
     feed_id: 1,
     feed_name: 'Test Feed',
+    article_kind: null,
     title: 'Test Article',
     url: 'https://example.com/1',
     published_at: '2026-01-01T00:00:00Z',
@@ -134,6 +135,7 @@ function makeArticle(overrides: Partial<ArticleListItem> = {}): ArticleListItem 
     summary: null,
     excerpt: 'Excerpt text',
     og_image: null,
+    has_video: false,
     seen_at: null,
     read_at: null,
     bookmarked_at: null,
@@ -390,6 +392,73 @@ describe('ArticleList', () => {
     }
     renderArticleList('/feeds/1')
     expect(screen.queryByTestId('metrics-bar')).toBeNull()
+  })
+
+  it('shows article kind filters for X feeds and refetches when changed', () => {
+    const mockSetSize = vi.fn()
+    swrFeedsData = {
+      feeds: [
+        {
+          id: 1,
+          name: 'X Feed',
+          type: 'rss',
+          url: 'https://x.com/example',
+          rss_url: 'https://rsshub.app/twitter/user/example',
+          rss_bridge_url: null,
+          unread_count: 1,
+          article_count: 1,
+        },
+      ],
+    }
+    swrInfiniteReturn = {
+      data: [{ articles: [makeArticle({ id: 1, feed_id: 1, article_kind: 'repost' })], total: 1, has_more: false }],
+      error: undefined,
+      size: 1,
+      setSize: mockSetSize,
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+    }
+
+    renderArticleList('/feeds/1')
+    expect(screen.getByText('All')).toBeTruthy()
+    expect(screen.getByText('Original')).toBeTruthy()
+    expect(screen.getByText('Repost')).toBeTruthy()
+    expect(screen.getByText('Quote')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Repost'))
+    expect(mockSetSize).toHaveBeenCalledWith(1)
+  })
+
+  it('does not show article kind filters for non-X feeds', () => {
+    swrFeedsData = {
+      feeds: [
+        {
+          id: 1,
+          name: 'Blog Feed',
+          type: 'rss',
+          url: 'https://example.com',
+          rss_url: 'https://example.com/rss',
+          rss_bridge_url: null,
+          unread_count: 1,
+          article_count: 1,
+        },
+      ],
+    }
+    swrInfiniteReturn = {
+      data: [{ articles: [makeArticle({ id: 1, feed_id: 1 })], total: 1, has_more: false }],
+      error: undefined,
+      size: 1,
+      setSize: vi.fn(),
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+    }
+
+    renderArticleList('/feeds/1')
+    expect(screen.queryByText('Original')).toBeNull()
+    expect(screen.queryByText('Repost')).toBeNull()
+    expect(screen.queryByText('Quote')).toBeNull()
   })
 
   it('retry button resets pagination', () => {

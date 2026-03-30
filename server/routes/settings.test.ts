@@ -86,6 +86,20 @@ describe('PATCH /api/settings/preferences — provider-model validation', () => 
     expect(res.statusCode).toBe(200)
   })
 
+  it('accepts custom model names for openai-compatible APIs', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/preferences',
+      headers: json,
+      payload: {
+        'summary.provider': 'openai',
+        'summary.model': 'deepseek-chat',
+      },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()['summary.model']).toBe('deepseek-chat')
+  })
+
   it('rejects model that does not belong to provider', async () => {
     const res = await app.inject({
       method: 'PATCH',
@@ -242,6 +256,18 @@ describe('PATCH /api/settings/preferences — AI provider/model enums', () => {
     })
     expect(res.statusCode).toBe(400)
     expect(res.json().error).toMatch(/not valid for provider/)
+  })
+
+  it('accepts openai.base_url as a free-form preference', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/preferences',
+      headers: json,
+      payload: { 'openai.base_url': 'https://openrouter.ai/api/v1' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()['openai.base_url']).toBe('https://openrouter.ai/api/v1')
+    expect(getSetting('openai.base_url')).toBe('https://openrouter.ai/api/v1')
   })
 
   it('accepts all four valid provider values for chat', async () => {

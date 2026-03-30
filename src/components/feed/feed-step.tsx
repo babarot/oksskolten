@@ -197,7 +197,7 @@ export function FeedStep({ onClose, onCreated, onFetchStarted, categories }: Fee
       // Non-SSE response (400/409 errors)
       if (!contentType.includes('text/event-stream')) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || res.statusText)
+        throw new Error(data.error || res.statusText || `HTTP ${res.status}`)
       }
 
       // SSE response — read step events

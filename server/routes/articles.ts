@@ -33,6 +33,7 @@ import type { AiTextResult } from '../fetcher.js'
 import { archiveArticleImages, isImageArchivingEnabled, deleteArticleImages } from '../fetcher/article-images.js'
 import { getSetting } from '../db/settings.js'
 import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
+import type { ArticleKind } from '../../shared/article-kind.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import { dataPath } from '../paths.js'
@@ -57,6 +58,7 @@ const coerceOptionalNumber = z.preprocess(
 const ArticlesQuery = z.object({
   feed_id: coerceOptionalNumber,
   category_id: coerceOptionalNumber,
+  article_kind: z.enum(['original', 'repost', 'quote']).optional(),
   unread: z.string().optional(),
   bookmarked: z.string().optional(),
   liked: z.string().optional(),
@@ -217,6 +219,7 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
     const offset = Math.max(query.offset || 0, 0)
     const feedId = query.feed_id ?? undefined
     const categoryId = query.category_id ?? undefined
+    const articleKind = query.article_kind as ArticleKind | undefined
     const unread = query.unread === '1'
     const bookmarked = query.bookmarked === '1'
     const liked = query.liked === '1'
@@ -226,14 +229,14 @@ export async function articleRoutes(api: FastifyInstance): Promise<void> {
 
     const isClipFeed = feedId != null && getClipFeed()?.id === feedId
     const smartFloor = !noFloor && !isClipFeed && !unread && !bookmarked && !liked && !read
-    const { articles, total, totalWithoutFloor } = getArticles({ feedId, categoryId, unread, bookmarked, liked, read, sort, limit, offset, smartFloor })
+    const { articles, total, totalWithoutFloor } = getArticles({ feedId, categoryId, articleKind, unread, bookmarked, liked, read, sort, limit, offset, smartFloor })
     const hasMore = offset + articles.length < total
 
     // When unread filter yields 0 results, return total article count (without unread filter)
     // so the UI can distinguish "no articles" from "all read"
     let totalAll: number | undefined
     if (unread && total === 0 && offset === 0) {
-      const allResult = getArticles({ feedId, categoryId, limit: 0, offset: 0 })
+      const allResult = getArticles({ feedId, categoryId, articleKind, limit: 0, offset: 0 })
       totalAll = allResult.total
     }
 

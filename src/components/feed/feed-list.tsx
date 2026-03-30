@@ -303,11 +303,12 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
       >
         <div className="flex items-center gap-2 min-w-0">
           {(() => {
-            const domain = extractDomain(feed.url)
-            if (!domain) return null
+            const fallbackDomain = extractDomain(feed.url)
+            const iconSrc = feed.icon_url || (fallbackDomain ? `https://www.google.com/s2/favicons?sz=16&domain=${fallbackDomain}` : null)
+            if (!iconSrc) return null
             return (
               <img
-                src={`https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
+                src={iconSrc}
                 alt=""
                 width={16}
                 height={16}

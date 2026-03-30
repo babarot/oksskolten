@@ -1,10 +1,11 @@
 import {
   getEnabledFeeds,
-  getExistingArticleUrls,
+  getExistingArticlesByUrls,
   getRetryArticles,
   getRetryStats,
   insertArticle,
   updateArticleContent,
+  updateArticleKindIfMissing,
   updateFeedError,
   updateFeedRateLimit,
   updateFeedCacheHeaders,
@@ -16,11 +17,12 @@ import {
 import { Semaphore, CONCURRENCY, errorMessage } from './fetcher/util.js'
 import { detectAndStoreSimilarArticles } from './similarity.js'
 import { type FetchProgressEvent, emitProgress, markFeedDone } from './fetcher/progress.js'
-import { fetchFullText, isBotBlockPage, convertHtmlToMarkdown, markdownToExcerpt, MIN_EXTRACTED_LENGTH } from './fetcher/content.js'
+import { fetchFullText, isBotBlockPage, convertHtmlToMarkdown, markdownToExcerpt, extractFirstVideoPoster, MIN_EXTRACTED_LENGTH } from './fetcher/content.js'
 import { type FetchRssResult, fetchAndParseRss, RateLimitError } from './fetcher/rss.js'
 import { computeInterval, computeEmpiricalInterval, sqliteFuture, DEFAULT_INTERVAL } from './fetcher/schedule.js'
 import { detectLanguage } from './fetcher/ai.js'
 import { logger } from './logger.js'
+import type { ArticleKind } from '../shared/article-kind.js'
 
 const log = logger.child('fetcher')
 
@@ -72,7 +74,7 @@ export async function fetchArticleContent(
     fullText = existing.full_text
     ogImage = existing.og_image
   } else if (isAnchorLink && options?.listingExcerpt) {
-    fullText = convertHtmlToMarkdown(options.listingExcerpt)
+    fullText = convertHtmlToMarkdown(options.listingExcerpt, { baseUrl: url })
     excerpt = markdownToExcerpt(fullText)
   } else {
     try {
@@ -94,7 +96,7 @@ export async function fetchArticleContent(
     const extractedLen = fullText?.replace(/\s+/g, ' ').trim().length ?? 0
     const shouldFallback = !fullText || isBotBlockPage(fullText) || extractedLen < MIN_EXTRACTED_LENGTH
     if (shouldFallback) {
-      const md = convertHtmlToMarkdown(options.listingExcerpt)
+      const md = convertHtmlToMarkdown(options.listingExcerpt, { baseUrl: url })
       const mdLen = md.replace(/\s+/g, ' ').trim().length
       // Only use RSS content if it's more substantial than what we extracted
       if (mdLen > extractedLen) {
@@ -104,6 +106,10 @@ export async function fetchArticleContent(
         lastError = null
       }
     }
+  }
+
+  if (!ogImage && options?.listingExcerpt) {
+    ogImage = extractFirstVideoPoster(options.listingExcerpt, url)
   }
 
   // Step 2: Detect language (local, no API call)
@@ -123,6 +129,7 @@ interface NewArticle {
   feed_id: number
   title: string
   url: string
+  article_kind?: ArticleKind | null
   published_at: string | null
   requires_js_challenge?: boolean
   /** Excerpt from listing page (CSS Bridge content_selector), used as fullText fallback */
@@ -155,6 +162,7 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
         feed_id: task.feed_id,
         title: task.title,
         url: task.url,
+        article_kind: task.article_kind ?? null,
         published_at: task.published_at,
         lang: effectiveLang,
         full_text: content.fullText,
@@ -182,6 +190,18 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
     })
   }
   return !!content.lastError
+}
+
+function backfillExistingArticleKinds(
+  rssResult: FetchRssResult,
+  existingArticles: Map<string, { id: number; article_kind: ArticleKind | null }>,
+): void {
+  for (const item of rssResult.items) {
+    if (!item.article_kind) continue
+    const existing = existingArticles.get(item.url)
+    if (!existing || existing.article_kind) continue
+    updateArticleKindIfMissing(existing.id, item.article_kind)
+  }
 }
 
 // --- Single feed fetch ---
@@ -226,7 +246,8 @@ export async function fetchSingleFeed(
   }
 
   const urls = rssResult.items.map(i => i.url)
-  const existing = getExistingArticleUrls(urls)
+  const existing = getExistingArticlesByUrls(urls)
+  backfillExistingArticleKinds(rssResult, existing)
   const tasks: ArticleTask[] = rssResult.items
     .filter(item => !existing.has(item.url))
     .map(item => ({
@@ -234,6 +255,7 @@ export async function fetchSingleFeed(
       feed_id: feed.id,
       title: item.title,
       url: item.url,
+      article_kind: item.article_kind ?? null,
       published_at: item.published_at,
       requires_js_challenge: !!feed.requires_js_challenge,
       excerpt: item.excerpt,
@@ -322,7 +344,8 @@ export async function fetchAllFeeds(
           }
 
           const urls = rssResult.items.map(i => i.url)
-          const existing = getExistingArticleUrls(urls)
+          const existing = getExistingArticlesByUrls(urls)
+          backfillExistingArticleKinds(rssResult, existing)
 
           const newItems: ArticleTask[] = rssResult.items
             .filter(item => !existing.has(item.url))
@@ -331,8 +354,10 @@ export async function fetchAllFeeds(
               feed_id: feed.id,
               title: item.title,
               url: item.url,
+              article_kind: item.article_kind ?? null,
               published_at: item.published_at,
               requires_js_challenge: !!feed.requires_js_challenge,
+              excerpt: item.excerpt,
             }))
 
           allTasks.push(...newItems)

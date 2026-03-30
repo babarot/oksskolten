@@ -4,6 +4,7 @@ import seedConversationsEn from './seed/en/conversations.json'
 import seedConversationsJa from './seed/ja/conversations.json'
 import { getLocale, dt } from './i18n'
 import type { FeedWithCounts, ArticleListItem, ArticleDetail, Category } from '../../../shared/types'
+import type { ArticleKind } from '../../../shared/article-kind'
 
 type Locale = 'ja' | 'en'
 
@@ -65,6 +66,7 @@ interface SeedFeed {
   id: number
   name: string
   url: string
+  icon_url?: string | null
   rss_url: string | null
   rss_bridge_url: string | null
   category_id: number | null
@@ -88,6 +90,7 @@ interface SeedArticle {
   feed_id: number
   title: string
   url: string
+  article_kind?: ArticleKind | null
   full_text: string | null
   full_text_translated: string | null
   summary: string | null
@@ -132,9 +135,14 @@ function feedName(feedId: number): string {
   return feeds.find(f => f.id === feedId)?.name ?? 'Unknown'
 }
 
+function feedIconUrl(feedId: number): string | null {
+  return feeds.find(f => f.id === feedId)?.icon_url ?? null
+}
+
 function createFeed(overrides: Partial<SeedFeed> & Pick<SeedFeed, 'name' | 'url'>): SeedFeed {
   return {
     id: nextFeedId++,
+    icon_url: null,
     rss_url: overrides.url,
     rss_bridge_url: null,
     category_id: null,
@@ -182,6 +190,8 @@ function toArticleListItem(a: SeedArticle): ArticleListItem {
     id: a.id,
     feed_id: a.feed_id,
     feed_name: feedName(a.feed_id),
+    feed_icon_url: feedIconUrl(a.feed_id),
+    article_kind: a.article_kind ?? null,
     title: a.title,
     url: a.url,
     published_at: a.published_at,
@@ -189,6 +199,7 @@ function toArticleListItem(a: SeedArticle): ArticleListItem {
     summary: summarizedIds.has(a.id) ? articleSummary(a) : null,
     excerpt: a.excerpt,
     og_image: a.og_image,
+    has_video: /<video\b/i.test(a.full_text ?? ''),
     seen_at: a.seen_at,
     read_at: a.read_at,
     bookmarked_at: a.bookmarked_at,
@@ -212,6 +223,7 @@ function toFeedWithCounts(f: SeedFeed): FeedWithCounts {
   const feedArticles = articles.filter(a => a.feed_id === f.id)
   return {
     ...f,
+    icon_url: f.icon_url ?? null,
     category_name: f.category_name,
     article_count: feedArticles.length,
     unread_count: feedArticles.filter(a => a.seen_at == null).length,

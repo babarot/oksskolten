@@ -369,6 +369,65 @@ describe('GET /api/articles?category_id', () => {
   })
 })
 
+describe('GET /api/articles feed icon metadata', () => {
+  it('returns feed_icon_url for article list items', async () => {
+    const feed = seedFeed({ icon_url: 'https://cdn.example.com/feed-icon.png' })
+    seedArticle(feed.id)
+
+    const res = await app.inject({ method: 'GET', url: '/api/articles' })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().articles[0].feed_icon_url).toBe('https://cdn.example.com/feed-icon.png')
+  })
+
+  it('filters article list items by article_kind', async () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    seedArticle(feed.id, { url: 'https://x.com/example/status/1', article_kind: 'original' })
+    seedArticle(feed.id, { url: 'https://x.com/example/status/2', article_kind: 'repost' })
+
+    const res = await app.inject({ method: 'GET', url: `/api/articles?feed_id=${feed.id}&article_kind=repost` })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().articles).toHaveLength(1)
+    expect(res.json().articles[0].article_kind).toBe('repost')
+  })
+
+  it('returns article_kind from by-url responses', async () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    seedArticle(feed.id, {
+      url: 'https://x.com/example/status/3',
+      article_kind: 'quote',
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/articles/by-url?url=${encodeURIComponent('https://x.com/example/status/3')}`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().article_kind).toBe('quote')
+  })
+
+  it('returns has_video from list and by-url responses', async () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, {
+      url: 'https://example.com/video',
+      full_text: '<video src="https://video.example.com/post.mp4" controls></video>',
+    })
+
+    const listRes = await app.inject({ method: 'GET', url: `/api/articles?feed_id=${feed.id}` })
+    expect(listRes.statusCode).toBe(200)
+    expect(listRes.json().articles[0].has_video).toBe(true)
+
+    const detailRes = await app.inject({
+      method: 'GET',
+      url: `/api/articles/by-url?url=${encodeURIComponent('https://example.com/video')}`,
+    })
+    expect(detailRes.statusCode).toBe(200)
+    expect(detailRes.json().has_video).toBe(true)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Read filter
 // ---------------------------------------------------------------------------

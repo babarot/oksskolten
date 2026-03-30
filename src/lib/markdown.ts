@@ -70,7 +70,7 @@ hljs.registerAliases(['html'], { languageName: 'xml' })
  * Repairs applied:
  *  1. [<picture>...<img src>...</picture>](url) → [![alt](src)](url)
  *  2. Standalone <picture>...</picture>         → ![alt](src)
- *  3. Stray <source> tags                       → removed
+ *  3. Stray <source> tags outside <video>      → removed
  *  4. [\n![alt](src)\n](url)                    → [![alt](src)](url)
  *  5. [text\nwith\nnewlines](url)               → [text with newlines](url)
  *
@@ -82,6 +82,12 @@ export function fixLegacyMarkdown(md: string): string {
   const parts = md.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g)
   for (let i = 0; i < parts.length; i += 2) {
     let s = parts[i]
+    const videoBlocks: string[] = []
+    s = s.replace(/<video\b[\s\S]*?<\/video>/gi, (match) => {
+      const token = `__OKSSKOLTEN_VIDEO_BLOCK_${videoBlocks.length}__`
+      videoBlocks.push(match)
+      return token
+    })
     // Helper: extract alt text from an <img> tag string
     const extractAlt = (_match: string, imgTag: string) => {
       const altMatch = imgTag.match(/alt=["']([^"']*)["']/i)
@@ -112,6 +118,9 @@ export function fixLegacyMarkdown(md: string): string {
         return `[${collapsed}](${url})`
       },
     )
+    s = s.replace(/__OKSSKOLTEN_VIDEO_BLOCK_(\d+)__/g, (_match, index: string) => {
+      return videoBlocks[Number(index)] ?? _match
+    })
     parts[i] = s
   }
   return parts.join('')

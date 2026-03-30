@@ -3,13 +3,24 @@ import { getSetting } from '../../db.js'
 import type { LLMProvider, LLMMessageParams, LLMStreamResult } from './provider.js'
 
 let cachedKey = ''
+let cachedBaseUrl = ''
 let cachedClient: OpenAI | null = null
+
+function getConfiguredOpenAIBaseUrl(): string | undefined {
+  const baseUrl = getSetting('openai.base_url')?.trim()
+  return baseUrl ? baseUrl.replace(/\/+$/, '') : undefined
+}
 
 export function getOpenAIClient(): OpenAI {
   const key = getSetting('api_key.openai') || ''
-  if (cachedClient && key === cachedKey) return cachedClient
+  const baseURL = getConfiguredOpenAIBaseUrl() || ''
+  if (cachedClient && key === cachedKey && baseURL === cachedBaseUrl) return cachedClient
   cachedKey = key
-  cachedClient = new OpenAI({ apiKey: key })
+  cachedBaseUrl = baseURL
+  cachedClient = new OpenAI({
+    apiKey: key,
+    ...(baseURL ? { baseURL } : {}),
+  })
   return cachedClient
 }
 

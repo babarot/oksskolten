@@ -28,6 +28,10 @@ import { openaiProvider, getOpenAIClient } from './openai.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockGetSetting.mockImplementation((key: string) => {
+    if (key === 'api_key.openai') return 'sk-test'
+    return undefined
+  })
 })
 
 // --- requireKey ---
@@ -48,24 +52,58 @@ describe('openaiProvider.requireKey', () => {
 
 describe('getOpenAIClient', () => {
   it('returns a client', () => {
-    mockGetSetting.mockReturnValue('sk-test')
     const client = getOpenAIClient()
     expect(client).toBeDefined()
   })
 
   it('caches client for same key', () => {
-    mockGetSetting.mockReturnValue('sk-test')
     const c1 = getOpenAIClient()
     const c2 = getOpenAIClient()
     expect(c1).toBe(c2)
   })
 
   it('creates new client when key changes', () => {
-    mockGetSetting.mockReturnValue('sk-key-1')
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.openai') return 'sk-key-1'
+      return undefined
+    })
     const c1 = getOpenAIClient()
-    mockGetSetting.mockReturnValue('sk-key-2')
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.openai') return 'sk-key-2'
+      return undefined
+    })
     const c2 = getOpenAIClient()
     expect(c1).not.toBe(c2)
+  })
+
+  it('creates new client when base URL changes', () => {
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.openai') return 'sk-test'
+      if (key === 'openai.base_url') return 'https://api.openai.com/v1'
+      return undefined
+    })
+    const c1 = getOpenAIClient()
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.openai') return 'sk-test'
+      if (key === 'openai.base_url') return 'https://openrouter.ai/api/v1'
+      return undefined
+    })
+    const c2 = getOpenAIClient()
+    expect(c1).not.toBe(c2)
+  })
+
+  it('passes configured base URL to the OpenAI client', () => {
+    mockGetSetting.mockImplementation((key: string) => {
+      if (key === 'api_key.openai') return 'sk-test'
+      if (key === 'openai.base_url') return 'https://openrouter.ai/api/v1/'
+      return undefined
+    })
+
+    const client = getOpenAIClient() as { opts?: { apiKey: string; baseURL?: string } }
+    expect(client.opts).toEqual({
+      apiKey: 'sk-test',
+      baseURL: 'https://openrouter.ai/api/v1',
+    })
   })
 })
 
@@ -73,7 +111,6 @@ describe('getOpenAIClient', () => {
 
 describe('openaiProvider.createMessage', () => {
   it('returns text and token counts', async () => {
-    mockGetSetting.mockReturnValue('sk-test')
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'Hello world' } }],
       usage: { prompt_tokens: 10, completion_tokens: 5 },
@@ -91,7 +128,6 @@ describe('openaiProvider.createMessage', () => {
   })
 
   it('includes system instruction as system message', async () => {
-    mockGetSetting.mockReturnValue('sk-test')
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'ok' } }],
       usage: { prompt_tokens: 5, completion_tokens: 2 },
@@ -109,7 +145,6 @@ describe('openaiProvider.createMessage', () => {
   })
 
   it('maps assistant role correctly', async () => {
-    mockGetSetting.mockReturnValue('sk-test')
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'ok' } }],
       usage: {},
@@ -130,7 +165,6 @@ describe('openaiProvider.createMessage', () => {
   })
 
   it('handles empty response', async () => {
-    mockGetSetting.mockReturnValue('sk-test')
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: null } }],
       usage: {},
@@ -150,8 +184,6 @@ describe('openaiProvider.createMessage', () => {
 
 describe('openaiProvider.streamMessage', () => {
   it('streams text deltas and calls onText', async () => {
-    mockGetSetting.mockReturnValue('sk-test')
-
     const chunks = [
       { choices: [{ delta: { content: 'Hello' } }], usage: null },
       { choices: [{ delta: { content: ' world' } }], usage: null },
@@ -178,7 +210,6 @@ describe('openaiProvider.streamMessage', () => {
   })
 
   it('requests stream with usage included', async () => {
-    mockGetSetting.mockReturnValue('sk-test')
     mockCreate.mockResolvedValue({
       [Symbol.asyncIterator]: async function* () {},
     })

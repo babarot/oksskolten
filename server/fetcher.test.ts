@@ -1606,6 +1606,72 @@ describe('fetchSingleFeed — content extraction', () => {
     expect(row.full_text).toContain('meaningful article content')
   })
 
+  it('preserves video-only RSS descriptions and uses poster as og_image', async () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test</title>
+    <item>
+      <title></title>
+      <link>https://x.com/example/status/1</link>
+      <description><![CDATA[<br><video src="https://video.twimg.com/post.mp4" poster="https://pbs.twimg.com/post.jpg" controls width="2048"></video>]]></description>
+    </item>
+  </channel>
+</rss>`
+    const emptyHtml = '<!DOCTYPE html><html><head><title>Video</title></head><body></body></html>'
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      if (u === 'https://x.com/example/status/1') return Promise.resolve(mockResponse(emptyHtml))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchSingleFeed(feed)
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text, excerpt, og_image FROM articles WHERE url = ?').get('https://x.com/example/status/1') as { full_text: string | null; excerpt: string | null; og_image: string | null }
+    expect(row.full_text).toContain('<video')
+    expect(row.full_text).toContain('poster="https://pbs.twimg.com/post.jpg"')
+    expect(row.full_text).not.toContain('width=')
+    expect(row.excerpt).toBeNull()
+    expect(row.og_image).toBe('https://pbs.twimg.com/post.jpg')
+  })
+
+  it('preserves text and video together when RSS description is used as fallback', async () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test</title>
+    <item>
+      <title>Mixed Video Post</title>
+      <link>https://x.com/example/status/2</link>
+      <description><![CDATA[Hello from RSS<br><video src="https://video.twimg.com/mixed.mp4" poster="https://pbs.twimg.com/mixed.jpg" controls></video>]]></description>
+    </item>
+  </channel>
+</rss>`
+    const emptyHtml = '<!DOCTYPE html><html><head><title>Video</title></head><body></body></html>'
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      if (u === 'https://x.com/example/status/2') return Promise.resolve(mockResponse(emptyHtml))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchSingleFeed(feed)
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text, excerpt, og_image FROM articles WHERE url = ?').get('https://x.com/example/status/2') as { full_text: string | null; excerpt: string | null; og_image: string | null }
+    expect(row.full_text).toContain('Hello from RSS')
+    expect(row.full_text).toContain('<video')
+    expect(row.excerpt).toContain('Hello from RSS')
+    expect(row.excerpt).not.toContain('<video')
+    expect(row.og_image).toBe('https://pbs.twimg.com/mixed.jpg')
+  })
+
   it('non-Error thrown in processArticle is stringified', async () => {
     const feed = seedFeed()
     const rssXml = rss20Xml('Test', [

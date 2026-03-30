@@ -91,6 +91,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
         let rssUrl: string | null = null
         let rssBridgeUrl: string | null = null
         let discoveredTitle: string | null = null
+        let discoveredIconUrl: string | null = null
         let requiresJsChallenge = false
 
         // Step 1: RSS auto-discovery
@@ -103,6 +104,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
           })
           rssUrl = result.rssUrl
           discoveredTitle = result.title
+          discoveredIconUrl = result.iconUrl
           if (result.usedFlareSolverr) requiresJsChallenge = true
           send({ type: 'step', step: 'rss-discovery', status: 'done', found: !!rssUrl })
         } catch {
@@ -139,6 +141,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
         const feed = createFeed({
           name: feedName,
           url: body.url,
+          icon_url: discoveredIconUrl,
           rss_url: rssUrl,
           rss_bridge_url: rssBridgeUrl,
           category_id: body.category_id ?? null,
@@ -261,12 +264,14 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
 
       let rssUrl: string | null = null
       let rssBridgeUrl: string | null = null
+      let iconUrl: string | null = null
 
       // Step 1: RSS auto-discovery
       sse.send({ type: 'stage', stage: 'discovery' })
       try {
         const result = await discoverRssUrl(feed.url)
         rssUrl = result.rssUrl
+        iconUrl = result.iconUrl
       } catch {
         // Discovery failed
       }
@@ -288,6 +293,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
 
       // Update feed with new URLs
       updateFeed(params.id, {
+        icon_url: iconUrl,
         rss_url: rssUrl,
         rss_bridge_url: rssBridgeUrl,
       })
@@ -300,7 +306,7 @@ export async function feedRoutes(api: FastifyInstance): Promise<void> {
         })
       }
 
-      sse.send({ type: 'done', rss_url: rssUrl, rss_bridge_url: rssBridgeUrl })
+      sse.send({ type: 'done', rss_url: rssUrl, rss_bridge_url: rssBridgeUrl, icon_url: iconUrl })
       sse.end()
     },
   )

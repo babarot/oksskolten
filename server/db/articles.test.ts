@@ -14,6 +14,8 @@ import {
   recalculateScores,
   getRetryArticles,
   getRetryStats,
+  backfillLegacyXArticleKinds,
+  updateArticleKindIfMissing,
 } from '../db.js'
 import { createFeed, createCategory, getDb } from '../db.js'
 
@@ -75,6 +77,28 @@ describe('getArticles read filter', () => {
     expect(articles).toHaveLength(1)
     expect(total).toBe(1)
     expect(articles[0].liked_at).not.toBeNull()
+  })
+
+  it('filters by article kind', () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    seedArticle(feed.id, { url: 'https://x.com/example/status/1', article_kind: 'original' })
+    seedArticle(feed.id, { url: 'https://x.com/example/status/2', article_kind: 'repost' })
+
+    const { articles, total } = getArticles({ feedId: feed.id, articleKind: 'repost', limit: 100, offset: 0 })
+    expect(total).toBe(1)
+    expect(articles).toHaveLength(1)
+    expect(articles[0].article_kind).toBe('repost')
+  })
+
+  it('derives has_video from full_text in list queries', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, {
+      url: 'https://example.com/video',
+      full_text: '<video src="https://video.example.com/post.mp4" controls></video>',
+    })
+
+    const { articles } = getArticles({ feedId: feed.id, limit: 100, offset: 0 })
+    expect(articles[0].has_video).toBe(true)
   })
 })
 
@@ -160,6 +184,74 @@ describe('searchArticles', () => {
     const results = searchArticles({ category_id: cat.id, bookmarked: true, since: '2025-01-01' })
     expect(results).toHaveLength(1)
     expect(results[0].url).toBe('https://news.com/1')
+  })
+})
+
+describe('article kind persistence', () => {
+  it('stores article_kind on insert and returns it from detail queries', () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    const id = seedArticle(feed.id, {
+      url: 'https://x.com/example/status/1',
+      article_kind: 'quote',
+    })
+
+    expect(getArticleById(id)?.article_kind).toBe('quote')
+  })
+
+  it('derives has_video from full_text in detail queries', () => {
+    const feed = seedFeed()
+    const id = seedArticle(feed.id, {
+      url: 'https://example.com/video-detail',
+      full_text: '<p>Hello</p><video src="https://video.example.com/post.mp4" controls></video>',
+    })
+
+    expect(getArticleById(id)?.has_video).toBe(true)
+  })
+
+  it('only fills missing article_kind when backfilling by id', () => {
+    const feed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    const id = seedArticle(feed.id, { article_kind: null })
+
+    expect(updateArticleKindIfMissing(id, 'repost')).toBe(true)
+    expect(updateArticleKindIfMissing(id, 'quote')).toBe(false)
+    expect(getArticleById(id)?.article_kind).toBe('repost')
+  })
+
+  it('backfills legacy X reposts and quotes conservatively', () => {
+    const xFeed = seedFeed({ url: 'https://x.com/example', rss_url: 'https://rsshub.app/twitter/user/example' })
+    const otherFeed = seedFeed({ url: 'https://example.com/blog' })
+
+    const repostId = seedArticle(xFeed.id, {
+      title: 'RT Example: hello',
+      url: 'https://x.com/example/status/1',
+      article_kind: null,
+    })
+    const quoteId = seedArticle(xFeed.id, {
+      title: 'Quoted post',
+      url: 'https://x.com/example/status/2',
+      full_text: '<div class="rsshub-quote">quoted</div>',
+      article_kind: null,
+    })
+    const plainId = seedArticle(xFeed.id, {
+      title: 'Plain post',
+      url: 'https://x.com/example/status/3',
+      article_kind: null,
+    })
+    const otherId = seedArticle(otherFeed.id, {
+      title: 'RT should not backfill',
+      url: 'https://example.com/post/1',
+      article_kind: null,
+    })
+
+    const first = backfillLegacyXArticleKinds()
+    const second = backfillLegacyXArticleKinds()
+
+    expect(first.updated).toBe(2)
+    expect(second.updated).toBe(0)
+    expect(getArticleById(repostId)?.article_kind).toBe('repost')
+    expect(getArticleById(quoteId)?.article_kind).toBe('quote')
+    expect(getArticleById(plainId)?.article_kind).toBeNull()
+    expect(getArticleById(otherId)?.article_kind).toBeNull()
   })
 })
 

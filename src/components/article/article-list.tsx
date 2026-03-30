@@ -20,11 +20,13 @@ import { toast } from 'sonner'
 import { Mascot } from '../ui/mascot'
 import { FeedErrorBanner } from '../feed/feed-error-banner'
 import { Skeleton } from '../ui/skeleton'
+import { ActionChip } from '../ui/action-chip'
 import { useKeyboardNavigationContext } from '../../contexts/keyboard-navigation-context'
 import { useKeyboardNavigation } from '../../hooks/use-keyboard-navigation'
 import { apiPatch } from '../../lib/fetcher'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
+import { isXFeedSource, type ArticleKind } from '../../../shared/article-kind'
 
 interface ArticlesResponse {
   articles: ArticleListItem[]
@@ -62,6 +64,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const currentFeed = feedId && feedsData ? feedsData.feeds.find(f => f.id === feedId) : undefined
   const categoryId = categoryIdParam ? Number(categoryIdParam) : undefined
   const [showReadArticles, setShowReadArticles] = useState(false)
+  const [articleKindFilter, setArticleKindFilter] = useState<ArticleKind | 'all'>('all')
   const categoryUnreadOnly = !!categoryId && settings.categoryUnreadOnly === 'on'
   const unreadOnly = isInbox || (categoryUnreadOnly && !showReadArticles)
   const bookmarkedOnly = isBookmarks
@@ -77,6 +80,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     showThumbnails: settings.showThumbnails === 'on',
   }), [dateMode, indicatorStyle, settings.showUnreadIndicator, settings.showThumbnails])
   const isGridLayout = layout === 'card' || layout === 'magazine'
+  const showArticleKindFilter = !!feedId && !!currentFeed && isXFeedSource(currentFeed)
   const { t } = useI18n()
   const { progress, startFeedFetch } = useFetchProgressContext()
   const { mutate: globalMutate } = useSWRConfig()
@@ -85,6 +89,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     const params = new URLSearchParams()
     if (feedId) params.set('feed_id', String(feedId))
     if (categoryId) params.set('category_id', String(categoryId))
+    if (articleKindFilter !== 'all') params.set('article_kind', articleKindFilter)
     if (unreadOnly) params.set('unread', '1')
     if (bookmarkedOnly) params.set('bookmarked', '1')
     if (likedOnly) params.set('liked', '1')
@@ -374,8 +379,16 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     setAutoReadIds(new Set())
     setNoFloor(false)
     setShowReadArticles(false)
+    setArticleKindFilter('all')
     setFocusedItemId(null)
   }, [feedId, categoryId, setFocusedItemId])
+
+  const articleKindOptions: Array<{ value: ArticleKind | 'all'; label: string }> = [
+    { value: 'all', label: t('articleKind.all') },
+    { value: 'original', label: t('articleKind.original') },
+    { value: 'repost', label: t('articleKind.repost') },
+    { value: 'quote', label: t('articleKind.quote') },
+  ]
 
   return (
     <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
@@ -393,6 +406,24 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
 
       {currentFeed && currentFeed.type !== 'clip' && settings.showFeedActivity === 'on' && (
         <FeedMetricsBar feed={currentFeed} />
+      )}
+
+      {showArticleKindFilter && (
+        <div className="flex flex-wrap gap-2 px-4 md:px-6 py-3">
+          {articleKindOptions.map(option => (
+            <ActionChip
+              key={option.value}
+              active={articleKindFilter === option.value}
+              onClick={() => {
+                setArticleKindFilter(option.value)
+                setNoFloor(false)
+                void setSize(1)
+              }}
+            >
+              {option.label}
+            </ActionChip>
+          ))}
+        </div>
       )}
 
       {isLoading && <ArticleListSkeleton layout={layout} showThumbnails={displayConfig.showThumbnails} />}

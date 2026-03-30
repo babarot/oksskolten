@@ -21,7 +21,13 @@ interface ArticleCardProps extends ArticleDisplayConfig {
   onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void
 }
 
-function Thumbnail({ src, articleUrl, className }: { src: string | null; articleUrl: string; className?: string }) {
+function getArticleIconSrc(article: ArticleListItem, size: 16 | 32): string | null {
+  if (article.feed_icon_url) return article.feed_icon_url
+  const domain = extractDomain(article.url)
+  return domain ? `https://www.google.com/s2/favicons?sz=${size}&domain=${domain}` : null
+}
+
+function Thumbnail({ src, article, className }: { src: string | null; article: ArticleListItem; className?: string }) {
   const [failed, setFailed] = useState(false)
   const sizeClass = className ?? 'w-16 h-16'
 
@@ -38,12 +44,12 @@ function Thumbnail({ src, articleUrl, className }: { src: string | null; article
   }
 
   // Fallback: favicon in a bordered box
-  const domain = extractDomain(articleUrl)
-  if (domain) {
+  const iconSrc = getArticleIconSrc(article, 32)
+  if (iconSrc) {
     return (
       <div className={`${sizeClass} rounded shrink-0 border border-border bg-bg-subtle flex items-center justify-center`}>
         <img
-          src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
+          src={iconSrc}
           alt=""
           loading="lazy"
           width={24}
@@ -64,7 +70,7 @@ function Thumbnail({ src, articleUrl, className }: { src: string | null; article
   )
 }
 
-function LargeThumbnail({ src, articleUrl }: { src: string | null; articleUrl: string }) {
+function LargeThumbnail({ src, article }: { src: string | null; article: ArticleListItem }) {
   const [failed, setFailed] = useState(false)
 
   if (src && !failed) {
@@ -80,12 +86,12 @@ function LargeThumbnail({ src, articleUrl }: { src: string | null; articleUrl: s
   }
 
   // Fallback: favicon centered in placeholder
-  const domain = extractDomain(articleUrl)
+  const iconSrc = getArticleIconSrc(article, 32)
   return (
     <div className="w-full aspect-video rounded-t bg-bg-subtle border-b border-border flex items-center justify-center">
-      {domain ? (
+      {iconSrc ? (
         <img
-          src={`https://www.google.com/s2/favicons?sz=32&domain=${domain}`}
+          src={iconSrc}
           alt=""
           loading="lazy"
           width={32}
@@ -106,6 +112,7 @@ function useCardBase(article: ArticleListItem, dateMode: 'relative' | 'absolute'
   const navigate = useNavigate()
   const { t, locale } = useI18n()
   const isUnread = article.seen_at == null && !isReadInSession(article.id)
+  const displayTitle = article.has_video && !article.title.trim() ? t('article.videoPost') : article.title
   const domain = extractDomain(article.url)
   const dateText = dateMode === 'relative'
     ? formatRelativeDate(article.published_at, locale, { justNow: t('date.justNow') })
@@ -119,13 +126,30 @@ function useCardBase(article: ArticleListItem, dateMode: 'relative' | 'absolute'
     void navigate(href)
   }
 
-  return { isUnread, domain, dateText, href, handleClick, originalUrl: article.url }
+  return { isUnread, displayTitle, domain, dateText, href, handleClick, originalUrl: article.url }
+}
+
+function ArticleKindBadge({ article }: { article: ArticleListItem }) {
+  const { t } = useI18n()
+  if (!article.article_kind) return null
+  const labelKey = article.article_kind === 'original'
+    ? 'articleKind.original'
+    : article.article_kind === 'repost'
+      ? 'articleKind.repost'
+      : 'articleKind.quote'
+
+  return (
+    <span className="inline-flex shrink-0 rounded border border-border bg-bg-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+      {t(labelKey)}
+    </span>
+  )
 }
 
 /** List layout — classic single-column (current default) */
 function ListCard({ article, dateMode, indicatorStyle, showUnreadIndicator, showThumbnails, onClick }: ArticleCardProps) {
-  const { isUnread, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const { isUnread, displayTitle, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
   const showIndicator = isUnread && showUnreadIndicator
+  const metadataIconSrc = domain ? getArticleIconSrc(article, 16) : null
 
   return (
     <a
@@ -145,13 +169,16 @@ function ListCard({ article, dateMode, indicatorStyle, showUnreadIndicator, show
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <span
-            className={`text-[15px] truncate transition-colors duration-500 block ${
-              isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
-            }`}
-          >
-            {article.title}
-          </span>
+          <div className="flex items-center gap-2 min-w-0">
+            <ArticleKindBadge article={article} />
+            <span
+              className={`text-[15px] truncate transition-colors duration-500 block min-w-0 ${
+                isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
+              }`}
+            >
+              {displayTitle}
+            </span>
+          </div>
           {article.excerpt && (
             <p className="text-[13px] text-muted truncate mt-0.5">
               {article.excerpt}
@@ -161,7 +188,7 @@ function ListCard({ article, dateMode, indicatorStyle, showUnreadIndicator, show
             {domain && (
               <>
                 <img
-                  src={`https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
+                  src={metadataIconSrc ?? `https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
                   alt=""
                   width={14}
                   height={14}
@@ -174,7 +201,7 @@ function ListCard({ article, dateMode, indicatorStyle, showUnreadIndicator, show
             <span className="shrink-0">{dateText}</span>
           </div>
         </div>
-        {showThumbnails && <Thumbnail src={article.og_image} articleUrl={article.url} />}
+        {showThumbnails && <Thumbnail src={article.og_image} article={article} />}
       </div>
     </a>
   )
@@ -182,7 +209,8 @@ function ListCard({ article, dateMode, indicatorStyle, showUnreadIndicator, show
 
 /** Card layout — image-forward grid card */
 function GridCard({ article, dateMode, showThumbnails, onClick }: ArticleCardProps) {
-  const { isUnread, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const { isUnread, displayTitle, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const metadataIconSrc = domain ? getArticleIconSrc(article, 16) : null
 
   return (
     <a
@@ -191,15 +219,18 @@ function GridCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPro
       onClick={handleClick}
       className="article-card block border border-border rounded-lg overflow-hidden transition-[background-color,transform,box-shadow] duration-100 hover:bg-hover hover:-translate-y-px hover:shadow-sm select-none no-underline text-inherit"
     >
-      {showThumbnails && <LargeThumbnail src={article.og_image} articleUrl={article.url} />}
+      {showThumbnails && <LargeThumbnail src={article.og_image} article={article} />}
       <div className="p-3 overflow-hidden">
-        <span
-          className={`text-[14px] line-clamp-2 break-words transition-colors duration-500 ${
-            isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
-          }`}
-        >
-          {article.title}
-        </span>
+        <div className="flex items-start gap-2">
+          <ArticleKindBadge article={article} />
+          <span
+            className={`text-[14px] line-clamp-2 break-words transition-colors duration-500 ${
+              isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
+            }`}
+          >
+            {displayTitle}
+          </span>
+        </div>
         {article.excerpt && (
           <p className="text-[12px] text-muted line-clamp-2 mt-1">
             {article.excerpt}
@@ -209,7 +240,7 @@ function GridCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPro
           {domain && (
             <>
               <img
-                src={`https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
+                src={metadataIconSrc ?? `https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
                 alt=""
                 width={12}
                 height={12}
@@ -228,7 +259,8 @@ function GridCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPro
 
 /** Magazine layout — hero card (large) */
 function HeroCard({ article, dateMode, showThumbnails, onClick }: ArticleCardProps) {
-  const { isUnread, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const { isUnread, displayTitle, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const metadataIconSrc = domain ? getArticleIconSrc(article, 16) : null
 
   return (
     <a
@@ -237,15 +269,18 @@ function HeroCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPro
       onClick={handleClick}
       className="article-card block border border-border rounded-lg overflow-hidden transition-[background-color,transform,box-shadow] duration-100 hover:bg-hover hover:-translate-y-px hover:shadow-sm select-none no-underline text-inherit mb-4"
     >
-      {showThumbnails && <LargeThumbnail src={article.og_image} articleUrl={article.url} />}
+      {showThumbnails && <LargeThumbnail src={article.og_image} article={article} />}
       <div className="p-4">
-        <span
-          className={`text-[18px] line-clamp-2 transition-colors duration-500 ${
-            isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
-          }`}
-        >
-          {article.title}
-        </span>
+        <div className="flex items-start gap-2">
+          <ArticleKindBadge article={article} />
+          <span
+            className={`text-[18px] line-clamp-2 transition-colors duration-500 ${
+              isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
+            }`}
+          >
+            {displayTitle}
+          </span>
+        </div>
         {article.excerpt && (
           <p className="text-[14px] text-muted line-clamp-3 mt-1.5">
             {article.excerpt}
@@ -255,7 +290,7 @@ function HeroCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPro
           {domain && (
             <>
               <img
-                src={`https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
+                src={metadataIconSrc ?? `https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
                 alt=""
                 width={14}
                 height={14}
@@ -274,7 +309,8 @@ function HeroCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPro
 
 /** Magazine layout — small card (below hero) */
 function SmallCard({ article, dateMode, showThumbnails, onClick }: ArticleCardProps) {
-  const { isUnread, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const { isUnread, displayTitle, domain, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const metadataIconSrc = domain ? getArticleIconSrc(article, 16) : null
 
   return (
     <a
@@ -283,15 +319,18 @@ function SmallCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPr
       onClick={handleClick}
       className="article-card flex gap-3 border-b border-border py-2 px-4 md:px-6 transition-[background-color,transform,box-shadow] duration-100 hover:bg-hover hover:-translate-y-px hover:shadow-sm select-none no-underline text-inherit"
     >
-      {showThumbnails && <Thumbnail src={article.og_image} articleUrl={article.url} className="w-12 h-12" />}
+      {showThumbnails && <Thumbnail src={article.og_image} article={article} className="w-12 h-12" />}
       <div className="flex-1 min-w-0">
-        <span
-          className={`text-[14px] truncate transition-colors duration-500 block ${
-            isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
-          }`}
-        >
-          {article.title}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <ArticleKindBadge article={article} />
+          <span
+            className={`text-[14px] truncate transition-colors duration-500 block min-w-0 ${
+              isUnread ? 'font-semibold text-text' : 'font-normal text-muted'
+            }`}
+          >
+            {displayTitle}
+          </span>
+        </div>
         {article.excerpt && (
           <p className="text-[12px] text-muted truncate mt-0.5">
             {article.excerpt}
@@ -301,7 +340,7 @@ function SmallCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPr
           {domain && (
             <>
               <img
-                src={`https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
+                src={metadataIconSrc ?? `https://www.google.com/s2/favicons?sz=16&domain=${domain}`}
                 alt=""
                 width={12}
                 height={12}
@@ -320,7 +359,7 @@ function SmallCard({ article, dateMode, showThumbnails, onClick }: ArticleCardPr
 
 /** Compact layout — title and date only */
 function CompactCard({ article, dateMode, indicatorStyle, showUnreadIndicator, onClick }: ArticleCardProps) {
-  const { isUnread, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
+  const { isUnread, displayTitle, dateText, href, handleClick, originalUrl } = useCardBase(article, dateMode, onClick)
   const showIndicator = isUnread && showUnreadIndicator
 
   return (
@@ -345,7 +384,7 @@ function CompactCard({ article, dateMode, indicatorStyle, showUnreadIndicator, o
             isUnread ? 'font-medium text-text' : 'font-normal text-muted'
           }`}
         >
-          {article.title}
+          {displayTitle}
         </span>
         <span className="text-[11px] text-muted shrink-0 ml-2">{dateText}</span>
       </div>

@@ -14,11 +14,13 @@ import {
   assignCssBridgePseudoDates,
   fixGenericTitlesAndEnrichExcerpts,
 } from './css-bridge.js'
+import { detectArticleKindForFeed, type ArticleKind } from '../../shared/article-kind.js'
 
 export interface RssItem {
   title: string
   url: string
   published_at: string | null
+  article_kind?: ArticleKind | null
   excerpt?: string
 }
 
@@ -31,6 +33,13 @@ export interface FetchRssResult {
   httpCacheSeconds: number | null
   rssTtlSeconds: number | null
 }
+
+interface FeedMetadata {
+  title: string | null
+  iconUrl: string | null
+}
+
+type FeedSource = Pick<Feed, 'url' | 'rss_url' | 'rss_bridge_url'>
 
 export class RateLimitError extends Error {
   readonly retryAfterSeconds: number | null
@@ -121,6 +130,77 @@ function extractXmlRoot(s: string): string | null {
   if (feedMatch) return feedMatch[0]
 
   return null
+}
+
+function textOf(val: unknown): string {
+  if (typeof val === 'string') return val
+  if (val && typeof val === 'object' && '#text' in val) return String((val as Record<string, unknown>)['#text'])
+  return ''
+}
+
+function firstNonEmpty(...values: (string | null | undefined)[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return null
+}
+
+function resolveFeedAssetUrl(rawUrl: string | null | undefined, baseUrl: string): string | null {
+  if (!rawUrl) return null
+  try {
+    return new URL(rawUrl, baseUrl).toString()
+  } catch {
+    return null
+  }
+}
+
+async function parseFeedMetadata(xml: string, feedUrl: string): Promise<FeedMetadata> {
+  let title: string | null = null
+  let iconUrl: string | null = null
+
+  try {
+    const { parseFeed } = await import('feedsmith')
+    const parsed = parseFeed(xml) as Record<string, unknown>
+    const feed = parsed.feed as Record<string, unknown> | undefined
+    title = firstNonEmpty(
+      typeof parsed.title === 'string' ? parsed.title : null,
+      typeof feed?.title === 'string' ? feed.title : null,
+    )
+
+    const image = feed?.image as Record<string, unknown> | string | undefined
+    const imageUrl = typeof image === 'string'
+      ? image
+      : typeof image?.url === 'string'
+        ? image.url
+        : null
+    iconUrl = resolveFeedAssetUrl(imageUrl, feedUrl)
+  } catch {
+    // feedsmith failed, fall through to fast-xml-parser
+  }
+
+  const needsFallback = !title || !iconUrl
+  if (!needsFallback) return { title, iconUrl }
+
+  const { XMLParser } = await import('fast-xml-parser')
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+  const doc = parser.parse(xml)
+
+  const rssChannel = doc?.rss?.channel
+  const atomFeed = doc?.feed
+  const fallbackTitle = firstNonEmpty(
+    textOf(rssChannel?.title),
+    textOf(atomFeed?.title),
+  )
+  const fallbackIcon = firstNonEmpty(
+    textOf(rssChannel?.image?.url),
+    textOf(atomFeed?.logo),
+    textOf(atomFeed?.icon),
+  )
+
+  return {
+    title: title || fallbackTitle,
+    iconUrl: iconUrl || resolveFeedAssetUrl(fallbackIcon, feedUrl),
+  }
 }
 
 export async function fetchAndParseRss(feed: Feed, opts?: { skipCache?: boolean }): Promise<FetchRssResult> {
@@ -232,7 +312,7 @@ export async function fetchAndParseRss(feed: Feed, opts?: { skipCache?: boolean 
   // Parse XML and collect items — wrapped in try/catch for Fallback C
   let items: RssItem[]
   try {
-    items = await parseRssXml(xml)
+    items = await parseRssXml(feed, xml)
   } catch (err) {
     // Fallback C: CssSelectorBridge parse failure → FlareSolverr direct scrape
     if (isCssBridge) {
@@ -261,13 +341,31 @@ function cleanItems(items: RssItem[]): RssItem[] {
     .map(item => ({ ...item, url: cleanUrl(item.url) }))
 }
 
-async function parseRssXml(xml: string): Promise<RssItem[]> {
+function buildRssItem(
+  feed: FeedSource,
+  input: {
+    title: string
+    url: string
+    published_at: string | null
+    rawExcerpt?: string
+  },
+): RssItem {
+  return {
+    title: input.title,
+    url: input.url,
+    published_at: input.published_at,
+    article_kind: detectArticleKindForFeed(feed, { title: input.title, rawExcerpt: input.rawExcerpt }),
+    ...(input.rawExcerpt ? { excerpt: input.rawExcerpt } : {}),
+  }
+}
+
+async function parseRssXml(feed: FeedSource, xml: string): Promise<RssItem[]> {
   // Try feedsmith first
   try {
     const { parseFeed } = await import('feedsmith')
     const parsed = parseFeed(xml) as Record<string, unknown>
-    const feed = parsed.feed as Record<string, unknown> | undefined
-    const items = (parsed.items ?? parsed.entries ?? feed?.items ?? feed?.entries) as Record<string, unknown>[] | undefined
+    const parsedFeed = parsed.feed as Record<string, unknown> | undefined
+    const items = (parsed.items ?? parsed.entries ?? parsedFeed?.items ?? parsedFeed?.entries) as Record<string, unknown>[] | undefined
     if (items && items.length > 0) {
       return items
         .filter((item: Record<string, unknown>) => {
@@ -291,14 +389,14 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
           }
           const rawExcerpt = item.content_encoded || item['content:encoded'] || item.content || item.description || item.summary
           const excerpt = typeof rawExcerpt === 'string' ? rawExcerpt : (rawExcerpt && typeof rawExcerpt === 'object' && 'value' in rawExcerpt ? String((rawExcerpt as Record<string, unknown>).value) : undefined)
-          return {
+          return buildRssItem(feed, {
             title: (item.title as string) || 'Untitled',
             url: (url || item.id) as string,
             published_at: normalizeDate(
               (item.published || item.updated || item.date || item.pubDate || (item.dc as Record<string, unknown>)?.date) as string | undefined,
             ),
-            ...(excerpt ? { excerpt } : {}),
-          }
+            rawExcerpt: excerpt,
+          })
         })
     }
   } catch {
@@ -310,13 +408,6 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
   const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
   const doc = parser.parse(xml)
 
-  // fast-xml-parser returns { "#text": "...", "@_type": "html" } for elements with attributes
-  function textOf(val: unknown): string {
-    if (typeof val === 'string') return val
-    if (val && typeof val === 'object' && '#text' in val) return String((val as Record<string, unknown>)['#text'])
-    return ''
-  }
-
   // RSS 2.0
   const channel = doc?.rss?.channel
   if (channel?.item) {
@@ -324,12 +415,12 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
     return items
       .map((item: Record<string, unknown>) => {
         const excerpt = textOf(item['content:encoded']) || textOf(item.description)
-        return {
+        return buildRssItem(feed, {
           title: textOf(item.title) || 'Untitled',
           url: (item.link || item.guid || '') as string,
           published_at: normalizeDate(item.pubDate as string | undefined),
-          ...(excerpt ? { excerpt } : {}),
-        }
+          rawExcerpt: excerpt,
+        })
       })
       .filter((item: RssItem) => item.url)
   }
@@ -347,14 +438,14 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
         const id = entry.id as string | undefined
         const effectiveUrl = link || (id && /^https?:\/\//i.test(id) ? id : '') || ''
         const excerpt = textOf(entry.content) || textOf(entry.summary)
-        return {
+        return buildRssItem(feed, {
           title: textOf(entry.title) || 'Untitled',
           url: effectiveUrl,
           published_at: normalizeDate(
             (entry.published || entry.updated) as string | undefined,
           ),
-          ...(excerpt ? { excerpt } : {}),
-        }
+          rawExcerpt: excerpt,
+        })
       })
       .filter((item: RssItem) => item.url)
   }
@@ -365,10 +456,11 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
   if (rdfItem) {
     const items = Array.isArray(rdfItem) ? rdfItem : [rdfItem]
     return items
-      .map((item: Record<string, unknown>) => ({
+      .map((item: Record<string, unknown>) => buildRssItem(feed, {
         title: textOf(item.title) || 'Untitled',
         url: (item.link || item['@_rdf:about'] || '') as string,
         published_at: normalizeDate((item['dc:date'] ?? item.pubDate) as string | undefined),
+        rawExcerpt: textOf(item.description),
       }))
       .filter((item: RssItem) => item.url)
   }
@@ -376,35 +468,12 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
   throw new Error('Could not parse RSS/Atom feed')
 }
 
-async function fetchFeedTitle(rssUrl: string): Promise<string | null> {
+async function fetchFeedMetadata(rssUrl: string): Promise<FeedMetadata> {
   try {
     const { html: xml } = await fetchHtml(rssUrl, { timeout: DISCOVERY_TIMEOUT })
-
-    // Try feedsmith
-    try {
-      const { parseFeed } = await import('feedsmith')
-      const parsed = parseFeed(xml) as Record<string, unknown>
-      const feed = parsed.feed as Record<string, unknown> | undefined
-      const title = parsed.title ?? feed?.title
-      if (title && typeof title === 'string') return title
-    } catch {
-      // feedsmith failed, fall through
-    }
-
-    // Fallback: fast-xml-parser
-    const { XMLParser } = await import('fast-xml-parser')
-    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
-    const doc = parser.parse(xml)
-
-    const rssTitle = doc?.rss?.channel?.title
-    if (rssTitle && typeof rssTitle === 'string') return rssTitle
-
-    const atomTitle = doc?.feed?.title
-    if (atomTitle && typeof atomTitle === 'string') return atomTitle
-
-    return null
+    return parseFeedMetadata(xml, rssUrl)
   } catch {
-    return null
+    return { title: null, iconUrl: null }
   }
 }
 
@@ -412,7 +481,7 @@ export interface DiscoverCallbacks {
   onFlareSolverr?: (status: 'running' | 'done', found?: boolean) => void
 }
 
-export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallbacks): Promise<{ rssUrl: string | null; title: string | null; usedFlareSolverr: boolean }> {
+export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallbacks): Promise<{ rssUrl: string | null; title: string | null; iconUrl: string | null; usedFlareSolverr: boolean }> {
   let rssUrl: string | null = null
   let pageTitle: string | null = null
   let usedFlareSolverr = false
@@ -427,8 +496,8 @@ export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallba
     const ct = result.contentType
     if (ct.includes('xml') || ct.includes('atom') || ct.includes('rss')) {
       if (result.usedFlareSolverr) callbacks?.onFlareSolverr?.('done', true)
-      const feedTitle = await fetchFeedTitle(blogUrl)
-      return { rssUrl: blogUrl, title: feedTitle, usedFlareSolverr }
+      const metadata = await fetchFeedMetadata(blogUrl)
+      return { rssUrl: blogUrl, title: metadata.title, iconUrl: metadata.iconUrl, usedFlareSolverr }
     }
 
     // Otherwise treat as HTML and discover feed links
@@ -536,7 +605,7 @@ export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallba
             break
           }
           // Try parsing body as RSS (works if extractXmlFromBrowserViewer succeeded)
-          const items = await parseRssXml(flare.body)
+          const items = await parseRssXml({ url: blogUrl, rss_url: candidateUrl, rss_bridge_url: null }, flare.body)
           if (items.length > 0) {
             rssUrl = candidateUrl
             break
@@ -545,7 +614,7 @@ export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallba
           if (flare.body.includes('&lt;rss') || flare.body.includes('&lt;feed')) {
             const decoded = flare.body
               .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-            const decodedItems = await parseRssXml(decoded)
+            const decodedItems = await parseRssXml({ url: blogUrl, rss_url: candidateUrl, rss_bridge_url: null }, decoded)
             if (decodedItems.length > 0) {
               rssUrl = candidateUrl
               break
@@ -558,9 +627,9 @@ export async function discoverRssUrl(blogUrl: string, callbacks?: DiscoverCallba
     }
   }
 
-  if (!rssUrl) return { rssUrl: null, title: pageTitle, usedFlareSolverr }
+  if (!rssUrl) return { rssUrl: null, title: pageTitle, iconUrl: null, usedFlareSolverr }
 
   // Step 3: Fetch the feed itself to get the canonical feed title
-  const feedTitle = await fetchFeedTitle(rssUrl)
-  return { rssUrl, title: feedTitle || pageTitle, usedFlareSolverr }
+  const metadata = await fetchFeedMetadata(rssUrl)
+  return { rssUrl, title: metadata.title || pageTitle, iconUrl: metadata.iconUrl, usedFlareSolverr }
 }

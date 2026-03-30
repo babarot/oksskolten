@@ -7,7 +7,7 @@ import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import multipart from '@fastify/multipart'
 import cron, { type ScheduledTask } from 'node-cron'
-import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles } from './db.js'
+import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles, backfillLegacyXArticleKinds } from './db.js'
 import { logger } from './logger.js'
 
 const log = logger
@@ -19,6 +19,7 @@ import { passkeyRoutes } from './passkeyRoutes.js'
 import { oauthRoutes } from './oauthRoutes.js'
 import { fetchAllFeeds } from './fetcher.js'
 import { rebuildSearchIndex, isSearchReady, syncAllScoredArticlesToSearch } from './search/sync.js'
+import { CONTENT_SECURITY_POLICY } from './security.js'
 
 // --- Startup guards ---
 if (process.env.AUTH_DISABLED === '1' && process.env.NODE_ENV !== 'development') {
@@ -34,6 +35,13 @@ runMigrations()
 
 // --- Ensure virtual feed for clipped articles exists ---
 ensureClipFeed()
+
+// --- One-time legacy backfill for X article kinds ---
+if (!getSetting('system.article_kind_backfill_v1')) {
+  const { updated } = backfillLegacyXArticleKinds()
+  upsertSetting('system.article_kind_backfill_v1', new Date().toISOString())
+  log.info({ updated }, 'Backfilled legacy X article kinds')
+}
 
 // --- Dev seed data ---
 if (process.env.NODE_ENV === 'development') {
@@ -113,7 +121,7 @@ app.addHook('onRequest', (_req, reply, done) => {
   // for browser traffic. This gives browsers a clear signal to drop cached
   // Alt-Svc advertisements from previous responses.
   reply.header('Alt-Svc', 'clear')
-  reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'")
+  reply.header('Content-Security-Policy', CONTENT_SECURITY_POLICY)
   done()
 })
 

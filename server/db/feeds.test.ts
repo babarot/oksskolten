@@ -80,6 +80,32 @@ describe('updateFeed rss_url', () => {
   })
 })
 
+describe('feed icon_url', () => {
+  it('persists icon_url on create', () => {
+    const feed = seedFeed({ icon_url: 'https://example.com/icon.png' })
+
+    expect(feed.icon_url).toBe('https://example.com/icon.png')
+  })
+
+  it('updates icon_url field', () => {
+    const feed = seedFeed()
+
+    updateFeed(feed.id, { icon_url: 'https://example.com/new-icon.png' })
+
+    const updated = getFeedById(feed.id)!
+    expect(updated.icon_url).toBe('https://example.com/new-icon.png')
+  })
+
+  it('clears icon_url field', () => {
+    const feed = seedFeed({ icon_url: 'https://example.com/icon.png' })
+
+    updateFeed(feed.id, { icon_url: null })
+
+    const updated = getFeedById(feed.id)!
+    expect(updated.icon_url).toBeNull()
+  })
+})
+
 describe('updateFeed requires_js_challenge', () => {
   it('sets requires_js_challenge flag', () => {
     const feed = seedFeed()
@@ -117,6 +143,7 @@ describe('createFeed with all options', () => {
     const feed = createFeed({
       name: 'Full Feed',
       url: 'https://full.example.com',
+      icon_url: 'https://full.example.com/icon.png',
       rss_url: 'https://full.example.com/rss',
       rss_bridge_url: 'https://bridge.example.com/rss',
       category_id: cat.id,
@@ -124,6 +151,7 @@ describe('createFeed with all options', () => {
     })
 
     expect(feed.name).toBe('Full Feed')
+    expect(feed.icon_url).toBe('https://full.example.com/icon.png')
     expect(feed.rss_url).toBe('https://full.example.com/rss')
     expect(feed.rss_bridge_url).toBe('https://bridge.example.com/rss')
     expect(feed.category_id).toBe(cat.id)

@@ -49,6 +49,7 @@ const PREF_KEYS = [
   'translate.provider',
   'translate.model',
   'translate.target_lang',
+  'openai.base_url',
   'ollama.base_url',
   'ollama.custom_headers',
   'custom_themes',
@@ -82,6 +83,7 @@ const PREF_ALLOWED: Record<PrefKey, string[] | null> = {
   'translate.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'google-translate', 'deepl'],
   'translate.model': getAllModelValues(),
   'translate.target_lang': ['ja', 'en', 'zh'],
+  'openai.base_url': null,
   'ollama.base_url': null,
   'ollama.custom_headers': null,
   'custom_themes': null,
@@ -101,8 +103,8 @@ function validateProviderModel(body: Record<string, unknown>): string | null {
     const model = body[modelKey] !== undefined ? String(body[modelKey]) : getSetting(modelKey)
     const provider = body[providerKey] !== undefined ? String(body[providerKey]) : getSetting(providerKey)
     if (!model || !provider) continue
-    // google-translate, deepl, and ollama have no static model list
-    if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama') continue
+    // google-translate, deepl, ollama, and OpenAI-compatible APIs have no fixed server-side model list
+    if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama' || provider === 'openai') continue
     // claude-code uses anthropic model IDs
     const effectiveProvider = provider === 'claude-code' ? 'anthropic' : provider
     const allowedModels = getModelValues(effectiveProvider)
@@ -222,7 +224,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
           const provider = body[modelKeyPair.providerKey] !== undefined
             ? String(body[modelKeyPair.providerKey])
             : getSetting(modelKeyPair.providerKey)
-          if (provider === 'ollama') {
+          if (provider === 'ollama' || provider === 'openai') {
             upsertSetting(key, value)
             updated = true
             continue

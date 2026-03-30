@@ -210,6 +210,28 @@ docker compose -f compose.yaml -f compose.prod.yaml up --build -d
 
 The production compose file includes a `cloudflared` sidecar that exposes the app via Cloudflare Tunnel — no port forwarding or static IP required.
 
+### Deployment Notes
+
+If the public domain returns `502` immediately after a successful deploy, check `cloudflared` before assuming the app is broken.
+
+- A common failure mode is: the `server` container is healthy and serves `http://127.0.0.1:3000`, but `cloudflared` still holds a stale origin connection and logs `connect: connection refused` for `http://server:3000`.
+- In that state, `docker compose ps` may show the app as healthy while Cloudflare still returns `502`.
+- The fastest verification is:
+
+```bash
+docker compose -f compose.yaml -f compose.prod.yaml ps
+docker logs --tail 100 oksskolten-cloudflared-1
+docker exec oksskolten-server-1 curl --fail http://127.0.0.1:3000/api/health
+```
+
+- If the app is healthy locally but the domain still returns `502`, restart `cloudflared` to refresh origin connections:
+
+```bash
+docker compose -f compose.yaml -f compose.prod.yaml restart cloudflared
+```
+
+The helper script [`scripts/deploy-mangu.sh`](scripts/deploy-mangu.sh) now does this automatically after the `server` healthcheck passes, so rebuilds on the target host do not leave the tunnel pointing at a dead origin connection.
+
 ## License
 
 [AGPL-3.0](LICENSE)

@@ -61,6 +61,11 @@ describe('fixLegacyMarkdown', () => {
     expect(fixLegacyMarkdown(input)).toBe('text  more')
   })
 
+  it('preserves <source> tags inside <video>', () => {
+    const input = '<video controls><source src="https://video.example.com/post.mp4" type="video/mp4"></video>'
+    expect(fixLegacyMarkdown(input)).toBe(input)
+  })
+
   // --- Fenced code block preservation ---
 
   it('does not transform <picture> inside fenced code blocks (```)', () => {

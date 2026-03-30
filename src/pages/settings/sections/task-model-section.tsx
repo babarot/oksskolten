@@ -12,6 +12,7 @@ import {
   LLM_TASK_PROVIDERS,
 } from '../../../data/aiModels'
 import type { ModelGroup } from '../../../data/aiModels'
+import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from '@/components/ui/select'
 import type { Settings } from '../../../hooks/use-settings'
 import type { TranslateFn } from '../../../lib/i18n'
@@ -257,6 +258,9 @@ function ModelSelect({ provider, modelValue, setModel, t }: { provider: string; 
     fetcher,
     { revalidateOnFocus: false },
   )
+  const isCustomOpenAIModel = provider === 'openai' && Boolean(modelValue) && !OPENAI_MODELS.some(
+    group => group.models.some(model => model.value === modelValue),
+  )
 
   // Auto-select first Ollama model when switching to ollama and no model is set
   useEffect(() => {
@@ -307,21 +311,35 @@ function ModelSelect({ provider, modelValue, setModel, t }: { provider: string; 
   }
 
   return (
-    <Select value={modelValue || undefined} onValueChange={setModel}>
-      <SelectTrigger>
-        <SelectValue placeholder={t('integration.selectModel')} />
-      </SelectTrigger>
-      <SelectContent>
-        {getModelGroups(provider).map(group => (
-          <SelectGroup key={group.group}>
-            <SelectLabel>{group.group}</SelectLabel>
-            {group.models.map(m => (
-              <SelectItem key={m.value} value={m.value}>{m.label} ({m.value})</SelectItem>
-            ))}
-          </SelectGroup>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="space-y-2">
+      <Select value={isCustomOpenAIModel ? undefined : (modelValue || undefined)} onValueChange={setModel}>
+        <SelectTrigger>
+          <SelectValue placeholder={t('integration.selectModel')} />
+        </SelectTrigger>
+        <SelectContent>
+          {getModelGroups(provider).map(group => (
+            <SelectGroup key={group.group}>
+              <SelectLabel>{group.group}</SelectLabel>
+              {group.models.map(m => (
+                <SelectItem key={m.value} value={m.value}>{m.label} ({m.value})</SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+      {provider === 'openai' && (
+        <div className="space-y-1">
+          <span className="block text-[11px] text-muted select-none">{t('openai.customModelName')}</span>
+          <Input
+            value={modelValue}
+            onChange={e => setModel(e.target.value)}
+            placeholder={t('openai.customModelPlaceholder')}
+            className="h-9"
+          />
+          <p className="text-[11px] text-muted">{t('openai.customModelDesc')}</p>
+        </div>
+      )}
+    </div>
   )
 }
 

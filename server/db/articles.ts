@@ -5,6 +5,7 @@ import { syncArticleToSearch, deleteArticleFromSearch, deleteArticlesFromSearch,
 import { RETRY_MAX_ATTEMPTS, RETRY_BATCH_LIMIT } from '../fetcher/util.js'
 import { deleteArticleImages } from '../fetcher/article-images.js'
 import { logger } from '../logger.js'
+import { detectArticleKindForFeed, isArticleKind, type ArticleKind } from '../../shared/article-kind.js'
 
 const log = logger.child('retention')
 
@@ -27,6 +28,18 @@ function buildMeiliDoc(id: number): MeiliArticleDoc | null {
     FROM articles WHERE id = ?
   `).get(id) as MeiliArticleDoc | undefined
   return row ?? null
+}
+
+function hasVideoExpr(prefix: string): string {
+  return `CASE WHEN COALESCE(${prefix}full_text, '') LIKE '%<video%' THEN 1 ELSE 0 END`
+}
+
+function mapArticleListItem<T extends ArticleListItem>(article: T): T {
+  return { ...article, has_video: Boolean(article.has_video) }
+}
+
+function mapArticleDetail<T extends ArticleDetail>(article: T | undefined): T | undefined {
+  return article ? { ...article, has_video: Boolean(article.has_video) } : undefined
 }
 
 // --- Score computation ---
@@ -90,6 +103,7 @@ export function recalculateScores(): { updated: number } {
 export function getArticles(opts: {
   feedId?: number
   categoryId?: number
+  articleKind?: ArticleKind
   unread?: boolean
   bookmarked?: boolean
   liked?: boolean
@@ -109,6 +123,10 @@ export function getArticles(opts: {
   if (opts.categoryId) {
     conditions.push('a.category_id = @categoryId')
     params.categoryId = opts.categoryId
+  }
+  if (opts.articleKind) {
+    conditions.push('a.article_kind = @articleKind')
+    params.articleKind = opts.articleKind
   }
   if (opts.unread) {
     conditions.push('a.seen_at IS NULL')
@@ -191,8 +209,9 @@ export function getArticles(opts: {
     : undefined
 
   const articles = allNamed<ArticleListItem>(`
-    SELECT a.id, a.feed_id, f.name AS feed_name,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+    SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url,
+           a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           ${hasVideoExpr('a.')} AS has_video,
            a.score,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
@@ -200,35 +219,37 @@ export function getArticles(opts: {
     ${where}
     ORDER BY ${orderBy}
     LIMIT @_limit OFFSET @_offset
-  `, { ...params, _limit: Number(opts.limit), _offset: Number(opts.offset) })
+  `, { ...params, _limit: Number(opts.limit), _offset: Number(opts.offset) }).map(mapArticleListItem)
 
   return { articles, total, ...(totalWithoutFloor != null && totalWithoutFloor > total ? { totalWithoutFloor } : {}) }
 }
 
 export function getArticleByUrl(url: string): ArticleDetail | undefined {
-  return getDb().prepare(`
-    SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
+  return mapArticleDetail(getDb().prepare(`
+    SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url, f.type AS feed_type,
+           a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
+           ${hasVideoExpr('a.')} AS has_video,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.url = ?
-  `).get(normalizeUrl(url)) as ArticleDetail | undefined
+  `).get(normalizeUrl(url)) as ArticleDetail | undefined)
 }
 
 export function getArticleById(id: number): ArticleDetail | undefined {
-  return getDb().prepare(`
-    SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
+  return mapArticleDetail(getDb().prepare(`
+    SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url, f.type AS feed_type,
+           a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
+           ${hasVideoExpr('a.')} AS has_video,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            a.images_archived_at,
            (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.id = ?
-  `).get(id) as ArticleDetail | undefined
+  `).get(id) as ArticleDetail | undefined)
 }
 
 export function markArticleSeen(
@@ -342,6 +363,7 @@ export function insertArticle(data: {
   title: string
   url: string
   published_at: string | null
+  article_kind?: ArticleKind | null
   lang?: string | null
   full_text?: string | null
   full_text_translated?: string | null
@@ -352,12 +374,13 @@ export function insertArticle(data: {
   last_error?: string | null
 }): number {
   const info = runNamed(`
-    INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
-    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
+    INSERT INTO articles (feed_id, category_id, title, url, article_kind, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
+    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @article_kind, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
   `, {
     feed_id: data.feed_id,
     title: data.title,
     url: data.url,
+    article_kind: data.article_kind ?? null,
     published_at: data.published_at,
     lang: data.lang ?? null,
     full_text: data.full_text ?? null,
@@ -377,6 +400,7 @@ export function insertArticle(data: {
 export function updateArticleContent(
   articleId: number,
   data: {
+    article_kind?: ArticleKind | null
     lang?: string | null
     full_text?: string | null
     full_text_translated?: string | null
@@ -412,6 +436,73 @@ export function getExistingArticleUrls(urls: string[]): Set<string> {
     `SELECT url FROM articles WHERE url IN (${placeholders})`,
   ).all(...normalized) as { url: string }[]
   return new Set(rows.map(r => r.url))
+}
+
+export function getExistingArticlesByUrls(urls: string[]): Map<string, { id: number; article_kind: ArticleKind | null }> {
+  if (urls.length === 0) return new Map()
+  const normalized = urls.map(normalizeUrl)
+  const placeholders = normalized.map(() => '?').join(',')
+  const rows = getDb().prepare(
+    `SELECT id, url, article_kind FROM articles WHERE url IN (${placeholders})`,
+  ).all(...normalized) as Array<{ id: number; url: string; article_kind: string | null }>
+
+  return new Map(rows.map(row => [row.url, { id: row.id, article_kind: isArticleKind(row.article_kind) ? row.article_kind : null }]))
+}
+
+export function updateArticleKindIfMissing(id: number, articleKind: ArticleKind): boolean {
+  const result = getDb().prepare('UPDATE articles SET article_kind = ? WHERE id = ? AND article_kind IS NULL').run(articleKind, id)
+  return result.changes > 0
+}
+
+export function backfillLegacyXArticleKinds(): { updated: number } {
+  const xFeeds = getDb().prepare('SELECT id, url, rss_url, rss_bridge_url FROM feeds').all() as Array<{
+    id: number
+    url: string | null
+    rss_url: string | null
+    rss_bridge_url: string | null
+  }>
+  const xFeedIds = xFeeds.filter(feed => detectArticleKindForFeed(feed, {}) !== null).map(feed => feed.id)
+  if (xFeedIds.length === 0) return { updated: 0 }
+
+  const placeholders = xFeedIds.map(() => '?').join(',')
+  const rows = getDb().prepare(`
+    SELECT id, feed_id, title, excerpt, full_text
+    FROM articles
+    WHERE article_kind IS NULL
+      AND feed_id IN (${placeholders})
+  `).all(...xFeedIds) as Array<{
+    id: number
+    feed_id: number
+    title: string
+    excerpt: string | null
+    full_text: string | null
+  }>
+
+  const feedById = new Map(xFeeds.map(feed => [feed.id, feed]))
+  const updates: Array<{ id: number; articleKind: ArticleKind }> = []
+  for (const row of rows) {
+    const feed = feedById.get(row.feed_id)
+    if (!feed) continue
+
+    const rawExcerpt = [row.excerpt, row.full_text].filter(Boolean).join('\n')
+    const articleKind = detectArticleKindForFeed(feed, { title: row.title, rawExcerpt })
+    if (articleKind && articleKind !== 'original') {
+      updates.push({ id: row.id, articleKind })
+    }
+  }
+
+  if (updates.length === 0) return { updated: 0 }
+
+  const txn = getDb().transaction((items: Array<{ id: number; articleKind: ArticleKind }>) => {
+    let updated = 0
+    const stmt = getDb().prepare('UPDATE articles SET article_kind = ? WHERE id = ? AND article_kind IS NULL')
+    for (const item of items) {
+      updated += stmt.run(item.articleKind, item.id).changes
+    }
+    return updated
+  })
+
+  return { updated: txn(updates) }
 }
 
 // Backoff deadline: datetime when the article becomes eligible for retry again.
@@ -485,15 +576,15 @@ export function getArticlesByIds(
   const score = scoreExpr('a.')
 
   return getDb().prepare(`
-    SELECT a.id, a.feed_id, f.name AS feed_name,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt,
-           a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+    SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url,
+           a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt,
+           a.og_image, ${hasVideoExpr('a.')} AS has_video, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
            ${score} AS score
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     ${where}
     ORDER BY CASE a.id ${orderCase} END
-  `).all(...ids) as ArticleListItem[]
+  `).all(...ids).map((row) => mapArticleListItem(row as ArticleListItem))
 }
 
 // --- Search queries ---
@@ -561,15 +652,16 @@ export function searchArticles(opts: {
   }
 
   return allNamed<ArticleListItem>(`
-    SELECT a.id, a.feed_id, f.name AS feed_name,
-           a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+    SELECT a.id, a.feed_id, f.name AS feed_name, f.icon_url AS feed_icon_url,
+           a.title, a.url, a.article_kind, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+           ${hasVideoExpr('a.')} AS has_video,
            ${score} AS score
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     ${where}
     ORDER BY ${orderBy}
     LIMIT ${Number(limit)}
-  `, params)
+  `, params).map(mapArticleListItem)
 }
 
 export function markImagesArchived(articleId: number): void {

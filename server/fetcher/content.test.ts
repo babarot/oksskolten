@@ -472,6 +472,18 @@ describe('convertHtmlToMarkdown', () => {
     expect(md).not.toContain('\\[')
     expect(md).not.toContain('\\#')
   })
+
+  it('preserves video tags and resolves media URLs', () => {
+    const html = '<p>Hello</p><video src="/video.mp4" poster="/poster.jpg" controls width="2048" autoplay></video>'
+    const md = convertHtmlToMarkdown(html, { baseUrl: 'https://example.com/post' })
+    expect(md).toContain('Hello')
+    expect(md).toContain('<video')
+    expect(md).toContain('src="https://example.com/video.mp4"')
+    expect(md).toContain('poster="https://example.com/poster.jpg"')
+    expect(md).toContain('controls="controls"')
+    expect(md).not.toContain('width=')
+    expect(md).not.toContain('autoplay')
+  })
 })
 
 describe('markdownToExcerpt', () => {
@@ -504,5 +516,15 @@ describe('markdownToExcerpt', () => {
   it('collapses whitespace', () => {
     const md = 'Line one.\n\nLine two.  Spaces.'
     expect(markdownToExcerpt(md)).toBe('Line one. Line two. Spaces.')
+  })
+
+  it('strips raw video HTML while keeping surrounding text', () => {
+    const md = 'Intro text <video src="https://example.com/video.mp4" poster="https://example.com/poster.jpg" controls></video> outro'
+    expect(markdownToExcerpt(md)).toBe('Intro text outro')
+  })
+
+  it('returns null for video-only markdown', () => {
+    const md = '<video src="https://example.com/video.mp4" poster="https://example.com/poster.jpg" controls></video>'
+    expect(markdownToExcerpt(md)).toBeNull()
   })
 })

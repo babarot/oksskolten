@@ -60,7 +60,7 @@ function parseSSE(body: string): Record<string, unknown>[] {
 beforeEach(async () => {
   setupTestDb()
   app = await buildApp()
-  mockDiscoverRssUrl.mockReset().mockResolvedValue({ rssUrl: null, title: null })
+  mockDiscoverRssUrl.mockReset().mockResolvedValue({ rssUrl: null, title: null, iconUrl: null })
   mockFetchSingleFeed.mockReset().mockResolvedValue(undefined)
   mockQueryRssBridge.mockReset().mockResolvedValue(null)
   mockInferCssSelectorBridge.mockReset().mockResolvedValue(null)
@@ -72,7 +72,7 @@ beforeEach(async () => {
 
 describe('GET /api/discover-title', () => {
   it('returns discovered title', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'My Blog' })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'My Blog', iconUrl: null })
 
     const res = await app.inject({
       method: 'GET',
@@ -109,7 +109,7 @@ describe('GET /api/discover-title', () => {
 
 describe('POST /api/feeds — RSS discovery pipeline', () => {
   it('skips RSS bridge and CSS selector when rss_url is found', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed.xml', title: 'Blog' })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed.xml', title: 'Blog', iconUrl: 'https://example.com/icon.png' })
 
     const res = await app.inject({
       method: 'POST',
@@ -129,7 +129,7 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
   })
 
   it('falls back to RSS bridge when discovery fails', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: null, title: null })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: null, title: null, iconUrl: null })
     mockQueryRssBridge.mockResolvedValue('https://bridge.example.com/rss')
 
     const res = await app.inject({
@@ -148,10 +148,11 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
 
     const done = events.find(e => e.type === 'done') as any
     expect(done.feed.rss_bridge_url).toBe('https://bridge.example.com/rss')
+    expect(done.feed.icon_url).toBeNull()
   })
 
   it('falls back to CSS selector inference when both discovery and bridge fail', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: null, title: null })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: null, title: null, iconUrl: null })
     mockQueryRssBridge.mockResolvedValue(null)
     mockInferCssSelectorBridge.mockResolvedValue('https://bridge.example.com/css-bridge')
 
@@ -168,10 +169,11 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
 
     const done = events.find(e => e.type === 'done') as any
     expect(done.feed.rss_bridge_url).toBe('https://bridge.example.com/css-bridge')
+    expect(done.feed.icon_url).toBeNull()
   })
 
   it('uses hostname as feed name when no name and no title', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://unnamed.example.com/feed', title: null })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://unnamed.example.com/feed', title: null, iconUrl: null })
 
     const res = await app.inject({
       method: 'POST',
@@ -186,7 +188,7 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
   })
 
   it('uses discovered title as feed name when no name provided', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Discovered Title' })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Discovered Title', iconUrl: null })
 
     const res = await app.inject({
       method: 'POST',
@@ -201,7 +203,7 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
   })
 
   it('prefers explicit name over discovered title', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Discovered' })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Discovered', iconUrl: null })
 
     const res = await app.inject({
       method: 'POST',
@@ -258,7 +260,7 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
   })
 
   it('fires fetchSingleFeed for feeds with rss_url', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Blog' })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Blog', iconUrl: 'https://example.com/icon.png' })
 
     await app.inject({
       method: 'POST',
@@ -270,6 +272,21 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     // fetchSingleFeed is fire-and-forget, give it a tick
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(mockFetchSingleFeed).toHaveBeenCalled()
+  })
+
+  it('persists discovered icon_url when rss discovery succeeds', async () => {
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed.xml', title: 'Blog', iconUrl: 'https://example.com/icon.png' })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/feeds',
+      headers: json,
+      payload: { url: 'https://example.com' },
+    })
+
+    const events = parseSSE(res.body)
+    const done = events.find(e => e.type === 'done') as any
+    expect(done.feed.icon_url).toBe('https://example.com/icon.png')
   })
 
   it('does not fire fetchSingleFeed when no rss url found', async () => {
@@ -341,7 +358,7 @@ describe('POST /api/feeds/:id/fetch', () => {
 describe('POST /api/feeds/:id/re-detect', () => {
   it('re-detects RSS URL and updates feed', async () => {
     const feed = seedFeed()
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/new-feed.xml', title: 'New' })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/new-feed.xml', title: 'New', iconUrl: 'https://example.com/icon.png' })
 
     const res = await app.inject({
       method: 'POST',
@@ -353,11 +370,12 @@ describe('POST /api/feeds/:id/re-detect', () => {
     const done = events.find(e => e.type === 'done')
     expect(done?.rss_url).toBe('https://example.com/new-feed.xml')
     expect(done?.rss_bridge_url).toBeNull()
+    expect(done?.icon_url).toBe('https://example.com/icon.png')
   })
 
   it('falls back through bridge and CSS selector', async () => {
     const feed = seedFeed()
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: null, title: null })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: null, title: null, iconUrl: null })
     mockQueryRssBridge.mockResolvedValue(null)
     mockInferCssSelectorBridge.mockResolvedValue('https://bridge.example.com/css')
 
@@ -371,6 +389,7 @@ describe('POST /api/feeds/:id/re-detect', () => {
     const done = events.find(e => e.type === 'done')
     expect(done?.rss_url).toBeNull()
     expect(done?.rss_bridge_url).toBe('https://bridge.example.com/css')
+    expect(done?.icon_url).toBeNull()
   })
 
   it('returns 404 for non-existent feed', async () => {
@@ -383,7 +402,7 @@ describe('POST /api/feeds/:id/re-detect', () => {
 
   it('fires fetchSingleFeed after successful re-detect', async () => {
     const feed = seedFeed()
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: null })
+    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: null, iconUrl: 'https://example.com/icon.png' })
 
     await app.inject({
       method: 'POST',

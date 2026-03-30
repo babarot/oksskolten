@@ -30,6 +30,23 @@ describe('sanitizeHtml', () => {
     expect(result).toContain('loading="lazy"')
   })
 
+  it('allows video tags and media attributes', () => {
+    const html = '<video src="https://video.example.com/post.mp4" poster="https://img.example.com/post.jpg" controls playsinline preload="metadata"></video>'
+    const result = sanitizeHtml(html)
+    expect(result).toContain('<video')
+    expect(result).toContain('poster="https://img.example.com/post.jpg"')
+    expect(result).toContain('controls=""')
+    expect(result).toContain('playsinline=""')
+  })
+
+  it('preserves nested video source urls', () => {
+    const html = '<video controls><source src="https://video.example.com/post.mp4" type="video/mp4"></video>'
+    const result = sanitizeHtml(html)
+    expect(result).toContain('<source')
+    expect(result).toContain('src="https://video.example.com/post.mp4"')
+    expect(result).toContain('type="video/mp4"')
+  })
+
   it('preserves normal HTML', () => {
     const html = '<h1>Title</h1><p>Paragraph with <a href="https://example.com">link</a></p>'
     const result = sanitizeHtml(html)

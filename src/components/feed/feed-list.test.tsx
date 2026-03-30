@@ -57,6 +57,7 @@ function makeFeed(overrides: Partial<FeedWithCounts> = {}): FeedWithCounts {
     id: 1,
     name: 'Test Feed',
     url: 'https://example.com',
+    icon_url: null,
     rss_url: null,
     rss_bridge_url: null,
     category_id: null,
@@ -294,6 +295,31 @@ describe('FeedList', () => {
     )
     fireEvent.click(screen.getByText('Clickable Feed'))
     expect(mockNavigate).toHaveBeenCalledWith('/feeds/42')
+  })
+
+  it('prefers feed icon_url over favicon fallback', () => {
+    const feeds = [makeFeed({ id: 42, name: 'Custom Icon Feed', icon_url: 'https://cdn.example.com/icon.png', category_id: null })]
+    const { container } = renderFeedList(
+      {},
+      { feeds, bookmark_count: 0, like_count: 0, clip_feed_id: null },
+      { categories: [] },
+    )
+
+    const icon = container.querySelector('img[src="https://cdn.example.com/icon.png"]')
+    expect(icon).toBeTruthy()
+  })
+
+  it('falls back to Google favicon when icon_url is absent', () => {
+    const feeds = [makeFeed({ id: 43, name: 'Fallback Icon Feed', icon_url: null, url: 'https://example.com/blog', category_id: null })]
+    const { container } = renderFeedList(
+      {},
+      { feeds, bookmark_count: 0, like_count: 0, clip_feed_id: null },
+      { categories: [] },
+    )
+
+    const icon = container.querySelector('img[src*="google.com/s2/favicons"]')
+    expect(icon).toBeTruthy()
+    expect(icon?.getAttribute('src')).toContain('domain=example.com')
   })
 
   it('shows bookmark count badge', () => {

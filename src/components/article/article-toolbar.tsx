@@ -48,12 +48,24 @@ export function ArticleToolbar({
 }: ArticleToolbarProps) {
   const navigate = useNavigate()
   const { t } = useI18n()
+  const articleKindLabel = article.article_kind === 'original'
+    ? t('articleKind.original')
+    : article.article_kind === 'repost'
+      ? t('articleKind.repost')
+      : article.article_kind === 'quote'
+        ? t('articleKind.quote')
+        : null
 
   return (
     <div className="flex items-stretch flex-wrap gap-2 mb-6 select-none">
       <ActionChip className="max-w-[200px]" tooltip={article.feed_name} onClick={() => navigate(`/feeds/${article.feed_id}`)}>
         <span className="truncate">{article.feed_name}</span>
       </ActionChip>
+      {articleKindLabel && (
+        <div className="inline-flex items-center border border-border rounded px-2 py-0.5 text-[13px] text-muted bg-bg-subtle">
+          {articleKindLabel}
+        </div>
+      )}
       <ActionChip
         as="a"
         href={article.url}

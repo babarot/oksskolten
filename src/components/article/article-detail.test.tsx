@@ -416,3 +416,140 @@ describe('ArticleDetail stale translation filtering', () => {
     expect(firstArg).toEqual({ id: 1, full_text_translated: '中文译文' })
   })
 })
+
+describe('ArticleDetail article kind badge', () => {
+  it('shows article kind in the toolbar when present', () => {
+    const articleUrl = 'https://x.com/example/status/1'
+    const articleKey = `/api/articles/by-url?url=${encodeURIComponent(articleUrl)}`
+    const article = {
+      id: 1,
+      feed_id: 2,
+      feed_name: 'Example Feed',
+      title: 'Example Article',
+      url: articleUrl,
+      article_kind: 'quote' as const,
+      published_at: '2026-03-04T00:00:00.000Z',
+      lang: 'en',
+      summary: null,
+      excerpt: null,
+      og_image: null,
+      full_text: 'Body',
+      full_text_translated: null,
+      translated_lang: null,
+      seen_at: '2026-03-04T00:00:00.000Z',
+      read_at: '2026-03-04T00:00:00.000Z',
+      bookmarked_at: null,
+      liked_at: null,
+    }
+
+    render(
+      <MemoryRouter>
+        <LocaleContext.Provider value={{ locale: 'en', setLocale: vi.fn() }}>
+          <TooltipProvider>
+            <SWRConfig value={{ provider: () => new Map(), fallback: { [articleKey]: article } }}>
+              <Routes>
+                <Route element={<OutletWrapper />}>
+                  <Route path="*" element={<ArticleDetail articleUrl={articleUrl} />} />
+                </Route>
+              </Routes>
+            </SWRConfig>
+          </TooltipProvider>
+        </LocaleContext.Provider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Quote')).toBeTruthy()
+  })
+
+  it('renders video content in article body', () => {
+    const articleUrl = 'https://x.com/example/status/2'
+    const articleKey = `/api/articles/by-url?url=${encodeURIComponent(articleUrl)}`
+    const article = {
+      id: 2,
+      feed_id: 2,
+      feed_name: 'Example Feed',
+      title: 'Video post',
+      url: articleUrl,
+      article_kind: 'original' as const,
+      published_at: '2026-03-04T00:00:00.000Z',
+      lang: 'en',
+      summary: null,
+      excerpt: null,
+      og_image: 'https://pbs.twimg.com/post.jpg',
+      has_video: true,
+      full_text: '<video src="https://video.twimg.com/post.mp4" poster="https://pbs.twimg.com/post.jpg" controls></video>',
+      full_text_translated: null,
+      translated_lang: null,
+      seen_at: '2026-03-04T00:00:00.000Z',
+      read_at: '2026-03-04T00:00:00.000Z',
+      bookmarked_at: null,
+      liked_at: null,
+    }
+
+    render(
+      <MemoryRouter>
+        <LocaleContext.Provider value={{ locale: 'en', setLocale: vi.fn() }}>
+          <TooltipProvider>
+            <SWRConfig value={{ provider: () => new Map(), fallback: { [articleKey]: article } }}>
+              <Routes>
+                <Route element={<OutletWrapper />}>
+                  <Route path="*" element={<ArticleDetail articleUrl={articleUrl} />} />
+                </Route>
+              </Routes>
+            </SWRConfig>
+          </TooltipProvider>
+        </LocaleContext.Provider>
+      </MemoryRouter>,
+    )
+
+    const video = document.querySelector('video')
+    expect(video).not.toBeNull()
+    expect(video?.getAttribute('src')).toBe('https://video.twimg.com/post.mp4')
+  })
+
+  it('renders source-based video content in article body', () => {
+    const articleUrl = 'https://x.com/example/status/3'
+    const articleKey = `/api/articles/by-url?url=${encodeURIComponent(articleUrl)}`
+    const article = {
+      id: 3,
+      feed_id: 2,
+      feed_name: 'Example Feed',
+      title: 'Video post with source',
+      url: articleUrl,
+      article_kind: 'original' as const,
+      published_at: '2026-03-04T00:00:00.000Z',
+      lang: 'en',
+      summary: null,
+      excerpt: null,
+      og_image: 'https://pbs.twimg.com/post.jpg',
+      has_video: true,
+      full_text: '<video controls poster="https://pbs.twimg.com/post.jpg"><source src="https://video.twimg.com/post-source.mp4" type="video/mp4"></video>',
+      full_text_translated: null,
+      translated_lang: null,
+      seen_at: '2026-03-04T00:00:00.000Z',
+      read_at: '2026-03-04T00:00:00.000Z',
+      bookmarked_at: null,
+      liked_at: null,
+    }
+
+    render(
+      <MemoryRouter>
+        <LocaleContext.Provider value={{ locale: 'en', setLocale: vi.fn() }}>
+          <TooltipProvider>
+            <SWRConfig value={{ provider: () => new Map(), fallback: { [articleKey]: article } }}>
+              <Routes>
+                <Route element={<OutletWrapper />}>
+                  <Route path="*" element={<ArticleDetail articleUrl={articleUrl} />} />
+                </Route>
+              </Routes>
+            </SWRConfig>
+          </TooltipProvider>
+        </LocaleContext.Provider>
+      </MemoryRouter>,
+    )
+
+    const source = document.querySelector('video source')
+    expect(source).not.toBeNull()
+    expect(source?.getAttribute('src')).toBe('https://video.twimg.com/post-source.mp4')
+  })
+})

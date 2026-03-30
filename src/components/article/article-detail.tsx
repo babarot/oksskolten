@@ -178,13 +178,14 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   }
 
   const hasTranslation = !!fullTextTranslated
+  const displayTitle = article.has_video && !article.title.trim() ? t('article.videoPost') : article.title
 
   return (
     <>
     <article ref={articleRef} className="article-card max-w-2xl mx-auto px-6 md:px-10 py-8">
       {/* Title */}
       <h1 className="mb-1.5 text-[28px] font-bold leading-[1.3] break-words [overflow-wrap:anywhere]">
-        {article.title}
+        {displayTitle}
       </h1>
 
       {/* Date */}

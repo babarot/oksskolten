@@ -116,6 +116,7 @@ describe('generateOpml', () => {
     id: 1,
     name: 'Test Feed',
     url: 'https://example.com',
+    icon_url: null,
     rss_url: 'https://example.com/rss',
     rss_bridge_url: null,
     category_id: null,

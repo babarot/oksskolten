@@ -67,10 +67,25 @@ function ApiProviderCard({ provider, t }: { provider: string; t: TFunc }) {
     fetcher,
     { revalidateOnFocus: false },
   )
+  const { data: prefs, mutate: mutatePrefs } = useSWR<Record<string, string | null>>(
+    provider === 'openai' ? '/api/settings/preferences' : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  )
 
   const [apiKeyInput, setApiKeyInput] = useState('')
+  const [baseUrlInput, setBaseUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  const savedBaseUrl = (prefs?.['openai.base_url'] || '').trim()
+  const isOpenAIProvider = provider === 'openai'
+
+  useEffect(() => {
+    if (isOpenAIProvider) {
+      setBaseUrlInput(savedBaseUrl)
+    }
+  }, [isOpenAIProvider, savedBaseUrl])
 
   function showMessage(text: string, type: 'success' | 'error') {
     setMessage({ text, type })
@@ -93,15 +108,29 @@ function ApiProviderCard({ provider, t }: { provider: string; t: TFunc }) {
     : provider === 'google-translate' ? 'AIza...'
     : provider === 'deepl' ? '...'
     : 'sk-ant-...'
+  const trimmedBaseUrl = baseUrlInput.trim()
+  const hasBaseUrlChanges = isOpenAIProvider && trimmedBaseUrl !== savedBaseUrl
+  const canSave = Boolean(apiKeyInput || hasBaseUrlChanges)
 
   async function handleSave() {
-    if (saving) return
+    if (saving || !canSave) return
     setSaving(true)
     try {
-      await apiPost(endpoint, { apiKey: apiKeyInput })
-      void mutateKeyStatus()
+      if (apiKeyInput) {
+        await apiPost(endpoint, { apiKey: apiKeyInput })
+        void mutateKeyStatus()
+      }
+      if (hasBaseUrlChanges) {
+        await apiPatch('/api/settings/preferences', { 'openai.base_url': trimmedBaseUrl })
+        void mutatePrefs()
+      }
       setApiKeyInput('')
-      showMessage(savedMsg, 'success')
+      const successMessage = apiKeyInput && hasBaseUrlChanges
+        ? t('settings.saved')
+        : hasBaseUrlChanges
+          ? t('openai.baseUrlSaved')
+          : savedMsg
+      showMessage(successMessage, 'success')
     } catch (err: unknown) {
       showMessage(err instanceof Error ? err.message : 'Save failed', 'error')
     } finally {
@@ -169,6 +198,35 @@ function ApiProviderCard({ provider, t }: { provider: string; t: TFunc }) {
             </button>
           )}
           </div>
+        </FormField>
+      )}
+
+      {isOpenAIProvider && (
+        <FormField
+          label={t('openai.baseUrl')}
+          compact
+          hint={t('openai.baseUrlDesc')}
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              type="url"
+              value={baseUrlInput}
+              onChange={e => setBaseUrlInput(e.target.value)}
+              placeholder={t('openai.baseUrlPlaceholder')}
+              className="flex-1 py-1.5"
+            />
+            {canSave && (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50 select-none"
+              >
+                {saving ? '...' : t('settings.save')}
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-[11px] text-muted">{t('openai.compatibleApiNote')}</p>
         </FormField>
       )}
 

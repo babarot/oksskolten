@@ -93,10 +93,11 @@ describe('POST /api/feeds', () => {
       events.push(JSON.parse(line.slice(6)))
     }
 
-    const doneEvent = events.find(e => e.type === 'done') as { type: string; feed: { name: string; url: string } }
+    const doneEvent = events.find(e => e.type === 'done') as { type: string; feed: { name: string; url: string; icon_url: string | null } }
     expect(doneEvent).toBeDefined()
     expect(doneEvent.feed.name).toBe('My Blog')
     expect(doneEvent.feed.url).toBe('https://blog.example.com')
+    expect(doneEvent.feed.icon_url).toBeNull()
 
     // Verify step events are present
     const stepEvents = events.filter(e => e.type === 'step')

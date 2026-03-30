@@ -255,6 +255,28 @@ describe('FeedModal', () => {
     fetchSpy.mockRestore()
   })
 
+  it('non-JSON gateway error shows HTTP status', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response('Bad Gateway', {
+        status: 502,
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    )
+
+    render(<FeedModal {...defaultProps} />)
+    await user.click(screen.getByText('Add an RSS feed from a URL'))
+
+    const input = screen.getByPlaceholderText('URL')
+    await user.type(input, 'https://example.com')
+    await user.click(screen.getByText('Add'))
+
+    await waitFor(() => {
+      expect(screen.getByText('HTTP 502')).toBeTruthy()
+    })
+
+    fetchSpy.mockRestore()
+  })
+
   it('401 response triggers logoutClient', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       new Response(null, { status: 401 }),

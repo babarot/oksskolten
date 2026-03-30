@@ -45,6 +45,34 @@ const RSS_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`
 
+const RSS_XML_WITH_IMAGE = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Image Blog</title>
+    <image>
+      <url>https://example.com/icon.png</url>
+    </image>
+    <item>
+      <title>First Post</title>
+      <link>https://example.com/post-1</link>
+    </item>
+  </channel>
+</rss>`
+
+const RSS_XML_WITH_RELATIVE_IMAGE = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Relative Image Blog</title>
+    <image>
+      <url>/assets/icon.png</url>
+    </image>
+    <item>
+      <title>First Post</title>
+      <link>https://example.com/post-1</link>
+    </item>
+  </channel>
+</rss>`
+
 const ATOM_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Atom Blog</title>
@@ -58,6 +86,26 @@ const ATOM_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <link rel="alternate" href="https://example.com/atom-2"/>
     <link rel="self" href="https://example.com/atom-2.xml"/>
     <updated>2024-01-02T00:00:00Z</updated>
+  </entry>
+</feed>`
+
+const ATOM_XML_WITH_LOGO = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Blog</title>
+  <logo>https://example.com/logo.png</logo>
+  <entry>
+    <title>Atom Post</title>
+    <link rel="alternate" href="https://example.com/atom-1"/>
+  </entry>
+</feed>`
+
+const ATOM_XML_WITH_ICON = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Atom Icon Blog</title>
+  <icon>/icon.svg</icon>
+  <entry>
+    <title>Atom Post</title>
+    <link rel="alternate" href="https://example.com/atom-1"/>
   </entry>
 </feed>`
 
@@ -90,6 +138,28 @@ const RSS_GUID_FALLBACK_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <item>
       <title>Guid Post</title>
       <guid>https://example.com/guid-1</guid>
+    </item>
+  </channel>
+</rss>`
+
+const RSSHUB_X_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Twitter</title>
+    <item>
+      <title>RT Example User: reposted text</title>
+      <link>https://x.com/example/status/1</link>
+      <description>RT Example User&lt;br&gt;reposted text</description>
+    </item>
+    <item>
+      <title>Quoted post</title>
+      <link>https://x.com/example/status/2</link>
+      <description>Own text&lt;div class="rsshub-quote"&gt;quoted text&lt;/div&gt;</description>
+    </item>
+    <item>
+      <title>Original post</title>
+      <link>https://x.com/example/status/3</link>
+      <description>Original text</description>
     </item>
   </channel>
 </rss>`
@@ -211,6 +281,35 @@ describe('fetchAndParseRss', () => {
     expect(items).toHaveLength(1)
     expect(items[0].title).toBe('FXP Item')
     expect(items[0].url).toBe('https://example.com/fxp')
+  })
+
+  it('classifies RSSHub X items as repost, quote, and original', async () => {
+    mockSafeFetch.mockResolvedValue(mockResponse(RSSHUB_X_XML))
+
+    const { items } = await fetchAndParseRss({
+      id: 1,
+      name: 'x-feed',
+      url: 'https://x.com/example',
+      rss_url: 'https://rsshub.app/twitter/user/example',
+    } as any)
+
+    expect(items).toHaveLength(3)
+    expect(items[0].article_kind).toBe('repost')
+    expect(items[1].article_kind).toBe('quote')
+    expect(items[2].article_kind).toBe('original')
+  })
+
+  it('does not classify non-X feeds', async () => {
+    mockSafeFetch.mockResolvedValue(mockResponse(RSS_XML))
+
+    const { items } = await fetchAndParseRss({
+      id: 1,
+      name: 'test',
+      url: 'https://example.com',
+      rss_url: 'https://example.com/rss',
+    } as any)
+
+    expect(items[0].article_kind).toBeNull()
   })
 
   it('handles single RSS item (not array)', async () => {
@@ -668,5 +767,41 @@ describe('discoverRssUrl', () => {
     const result = await discoverRssUrl('https://example.com')
 
     expect(result.title).toBe('Test Blog')  // feed title, not "My Blog" from HTML
+  })
+
+  it('extracts RSS channel image url as iconUrl', async () => {
+    mockSafeFetch
+      .mockResolvedValueOnce(mockResponse(HTML_WITH_RSS_LINK, true, 200, 'text/html'))
+      .mockResolvedValueOnce(mockResponse(RSS_XML_WITH_IMAGE))
+
+    const result = await discoverRssUrl('https://example.com')
+
+    expect(result.iconUrl).toBe('https://example.com/icon.png')
+  })
+
+  it('extracts Atom logo or icon as iconUrl', async () => {
+    mockSafeFetch
+      .mockResolvedValueOnce(mockResponse(HTML_WITH_ATOM_LINK, true, 200, 'text/html'))
+      .mockResolvedValueOnce(mockResponse(ATOM_XML_WITH_LOGO))
+
+    const logoResult = await discoverRssUrl('https://example.com')
+    expect(logoResult.iconUrl).toBe('https://example.com/logo.png')
+
+    mockSafeFetch
+      .mockResolvedValueOnce(mockResponse(HTML_WITH_ATOM_LINK, true, 200, 'text/html'))
+      .mockResolvedValueOnce(mockResponse(ATOM_XML_WITH_ICON))
+
+    const iconResult = await discoverRssUrl('https://example.com')
+    expect(iconResult.iconUrl).toBe('https://example.com/icon.svg')
+  })
+
+  it('resolves relative iconUrl against the feed xml url', async () => {
+    mockSafeFetch
+      .mockResolvedValueOnce(mockResponse(HTML_WITH_RSS_LINK, true, 200, 'text/html'))
+      .mockResolvedValueOnce(mockResponse(RSS_XML_WITH_RELATIVE_IMAGE))
+
+    const result = await discoverRssUrl('https://example.com')
+
+    expect(result.iconUrl).toBe('https://example.com/assets/icon.png')
   })
 })

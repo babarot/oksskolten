@@ -211,4 +211,4 @@ export function isBotBlockPage(text: string): boolean {
 // Re-export markdown utilities so existing import sites don't break.
 // These live in a separate file to avoid circular dependency: contentWorker.ts
 // imports from here, but content.ts creates the Piscina pool that loads contentWorker.ts.
-export { convertHtmlToMarkdown, markdownToExcerpt } from './markdown-utils.js'
+export { convertHtmlToMarkdown, markdownToExcerpt, extractFirstVideoPoster } from './markdown-utils.js'
