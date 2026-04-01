@@ -128,7 +128,9 @@ EOF
 }
 
 deploy_remote_image() {
-  remote_bash \
+  local remote_cmd
+  printf -v remote_cmd \
+    'REMOTE_DIR=%q PROJECT_NAME=%q DATA_DIR=%q SERVER_IMAGE=%q MEILI_MASTER_KEY=%q TUNNEL_TOKEN=%q GHCR_USERNAME=%q GHCR_TOKEN=%q EXPECTED_GIT_COMMIT=%q EXPECTED_GIT_TAG=%q EXPECTED_BUILD_DATE=%q bash -s' \
     "$REMOTE_DIR" \
     "$PROJECT_NAME" \
     "$DATA_DIR" \
@@ -139,21 +141,22 @@ deploy_remote_image() {
     "$GHCR_TOKEN" \
     "$EXPECTED_GIT_COMMIT" \
     "$EXPECTED_GIT_TAG" \
-    "$EXPECTED_BUILD_DATE" \
-    <<'EOF'
+    "$EXPECTED_BUILD_DATE"
+
+  remote_exec "$remote_cmd" <<'EOF'
 set -euo pipefail
 
-remote_dir="$1"
-project_name="$2"
-data_dir="$3"
-server_image="$4"
-meili_master_key="$5"
-tunnel_token="$6"
-ghcr_username="$7"
-ghcr_token="$8"
-expected_git_commit="$9"
-expected_git_tag="${10}"
-expected_build_date="${11}"
+remote_dir="$REMOTE_DIR"
+project_name="$PROJECT_NAME"
+data_dir="$DATA_DIR"
+server_image="$SERVER_IMAGE"
+meili_master_key="$MEILI_MASTER_KEY"
+tunnel_token="$TUNNEL_TOKEN"
+ghcr_username="$GHCR_USERNAME"
+ghcr_token="$GHCR_TOKEN"
+expected_git_commit="$EXPECTED_GIT_COMMIT"
+expected_git_tag="$EXPECTED_GIT_TAG"
+expected_build_date="$EXPECTED_BUILD_DATE"
 
 cd "$remote_dir"
 touch .env
