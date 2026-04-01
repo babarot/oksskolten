@@ -32,6 +32,9 @@ const ALLOWLIST: RegExp[] = [
   // Translation provider implementation (Japanese in markdown protection logic)
   /^server\/providers\/translate\//,
 
+  // Feishu notification card/test payloads intentionally contain Chinese copy
+  /^server\/notifications\/feishu\.ts$/,
+
   // Binary / non-text assets
   /\.(png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot|webp|avif)$/,
 
