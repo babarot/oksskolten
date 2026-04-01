@@ -19,6 +19,10 @@ FROM deps AS build
 COPY . .
 RUN npm run build
 
+FROM deps AS prod-deps
+
+RUN npm prune --omit=dev
+
 FROM base AS runtime
 
 ARG GIT_COMMIT=unknown
@@ -29,8 +33,8 @@ ENV GIT_TAG=${GIT_TAG}
 ENV BUILD_DATE=${BUILD_DATE}
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+COPY package.json ./
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY shared ./shared
