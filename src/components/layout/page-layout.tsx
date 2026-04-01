@@ -10,6 +10,8 @@ interface PageLayoutProps {
   mode?: 'list' | 'detail'
   /** Feed name shown in header center (list mode) */
   feedName?: string | null
+  /** Optional action rendered next to feed name in list mode */
+  headerAction?: ReactNode
   /** Back button handler (detail mode) */
   onBack?: () => void
   /** Title shown in detail mode header */
@@ -22,7 +24,7 @@ interface PageLayoutProps {
   children: ReactNode
 }
 
-export function PageLayout({ mode = 'list', feedName, onBack, detailTitle, feedListProps, children }: PageLayoutProps) {
+export function PageLayout({ mode = 'list', feedName, headerAction, onBack, detailTitle, feedListProps, children }: PageLayoutProps) {
   const { sidebarOpen: drawerOpen, setSidebarOpen: setDrawerOpen } = useAppLayout()
 
   const [isScrolled, setIsScrolled] = useState(false)
@@ -52,7 +54,7 @@ export function PageLayout({ mode = 'list', feedName, onBack, detailTitle, feedL
         {mode === 'detail' ? (
           <Header mode="detail" onBack={onBack} detailTitle={detailTitle} isScrolled={isScrolled} sidebarOpen={drawerOpen} />
         ) : (
-          <Header mode="list" onMenuClick={() => setDrawerOpen(true)} feedName={feedName} isScrolled={isScrolled} sidebarOpen={drawerOpen} />
+          <Header mode="list" onMenuClick={() => setDrawerOpen(true)} feedName={feedName} headerAction={headerAction} isScrolled={isScrolled} sidebarOpen={drawerOpen} />
         )}
         <div ref={sentinelRef} className="h-0" />
         {children}

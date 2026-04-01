@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useI18n } from '../../lib/i18n'
 import { IconButton } from '../ui/icon-button'
 
@@ -6,13 +7,14 @@ interface HeaderProps {
   onMenuClick?: () => void
   onBack?: () => void
   feedName?: string | null
+  headerAction?: ReactNode
   /** Title shown centered in detail mode header */
   detailTitle?: string | null
   isScrolled?: boolean
   sidebarOpen?: boolean
 }
 
-export function Header({ mode, onMenuClick, onBack, feedName, detailTitle, isScrolled, sidebarOpen }: HeaderProps) {
+export function Header({ mode, onMenuClick, onBack, feedName, headerAction, detailTitle, isScrolled, sidebarOpen }: HeaderProps) {
   const { t } = useI18n()
 
   return (
@@ -39,14 +41,17 @@ export function Header({ mode, onMenuClick, onBack, feedName, detailTitle, isScr
               <path d="M3 5h14M3 10h14M3 15h14" />
             </svg>
           </IconButton>
-          <div className="flex-1 flex justify-center">
-            {feedName && (
-              <span className="text-[15px] font-semibold text-text">
-                {feedName}
-              </span>
-            )}
+          <div className="flex-1 flex justify-center min-w-0 px-2">
+            <div className="flex items-center justify-center gap-1 min-w-0 max-w-[70vw]">
+              {feedName && (
+                <span className="text-[15px] font-semibold text-text truncate">
+                  {feedName}
+                </span>
+              )}
+              {headerAction}
+            </div>
           </div>
-          <span className="w-8" />
+          <span className="w-8 shrink-0" />
         </>
       ) : (
         <>

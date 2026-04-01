@@ -19,6 +19,12 @@ describe('Header', () => {
     expect(screen.getByText('Tech News')).toBeTruthy()
   })
 
+  it('renders header action next to feed name in list mode', () => {
+    render(<Header mode="list" feedName="Tech News" headerAction={<button type="button">Feed menu</button>} />)
+    expect(screen.getByText('Tech News')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Feed menu' })).toBeTruthy()
+  })
+
   it('does not show feed name when not provided', () => {
     render(<Header mode="list" />)
     expect(screen.queryByText('Tech News')).toBeNull()

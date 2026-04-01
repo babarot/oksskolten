@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Settings2 } from 'lucide-react'
 import useSWR, { SWRConfig } from 'swr'
 import { useSettings, type Settings } from './hooks/use-settings'
 import { fetcher } from './lib/fetcher'
@@ -14,15 +15,22 @@ import { ArticleList, type ArticleListHandle } from './components/article/articl
 import { ArticleDetail } from './components/article/article-detail'
 import { ArticleRawPage } from './components/article/article-raw-page'
 import { PageLayout } from './components/layout/page-layout'
+import { IconButton } from './components/ui/icon-button'
+import { ConfirmDialog } from './components/ui/confirm-dialog'
+import { FeedNotificationDialog } from './components/feed/feed-notification-dialog'
+import { FeedDropdownMenu } from './components/feed/feed-context-menu'
+import { FeedRenameDialog } from './components/feed/feed-rename-dialog'
 import { SettingsPage } from './pages/settings-page'
 import { ChatPage } from './pages/chat-page'
 import { HomePage } from './pages/home-page'
 import { AuthShell } from './lib/auth-shell'
 import { ErrorBoundary } from './components/auth/error-boundary'
 import { HintBanner } from './components/ui/hint-banner'
-import { Toaster } from 'sonner'
-import { FetchProgressProvider } from './contexts/fetch-progress-context'
+import { Toaster, toast } from 'sonner'
+import { FetchProgressProvider, useFetchProgressContext } from './contexts/fetch-progress-context'
 import { TooltipProvider } from './components/ui/tooltip'
+import { useFeedActions } from './hooks/use-feed-actions'
+import type { Category, FeedWithCounts } from '../shared/types'
 
 export interface AppLayoutContext {
   settings: Settings
@@ -118,17 +126,34 @@ export function useAppLayout() {
   return useOutletContext<AppLayoutContext>()
 }
 
-function ArticleListPage() {
+export function ArticleListPage() {
   const { feedId, categoryId } = useParams<{ feedId?: string; categoryId?: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const { t } = useI18n()
   const isInbox = location.pathname === '/inbox'
   const isBookmarks = location.pathname === '/bookmarks'
   const isLikes = location.pathname === '/likes'
   const isHistory = location.pathname === '/history'
   const isClips = location.pathname === '/clips'
-  const { data: feedsData } = useSWR<{ feeds: Array<{ id: number; name: string; type: string; category_id: number | null; category_name: string | null }>; clip_feed_id: number | null }>('/api/feeds', fetcher)
-  const { data: categoriesData } = useSWR<{ categories: Array<{ id: number; name: string }> }>('/api/categories', fetcher)
+  const { startFeedFetch } = useFetchProgressContext()
+  const { data: feedsData, mutate: mutateFeeds } = useSWR<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }>('/api/feeds', fetcher)
+  const { data: categoriesData, mutate: mutateCategories } = useSWR<{ categories: Category[] }>('/api/categories', fetcher)
+  const feeds = useMemo(() => feedsData?.feeds ?? [], [feedsData])
+  const categories = useMemo(() => categoriesData?.categories ?? [], [categoriesData])
+  const currentFeed = feedId ? feeds.find(f => f.id === Number(feedId)) : undefined
+  const [notificationFeed, setNotificationFeed] = useState<FeedWithCounts | null>(null)
+
+  const categorized = useMemo(() => {
+    const map = new Map<number, FeedWithCounts[]>()
+    for (const feed of feeds) {
+      if (!feed.category_id) continue
+      const group = map.get(feed.category_id) ?? []
+      group.push(feed)
+      map.set(feed.category_id, group)
+    }
+    return map
+  }, [feeds])
 
   const headerName = isHistory
     ? t('feeds.history')
@@ -141,17 +166,75 @@ function ArticleListPage() {
           : isClips
             ? t('feeds.clips')
             : feedId
-          ? feedsData?.feeds.find(f => f.id === Number(feedId))?.name ?? null
+          ? currentFeed?.name ?? null
           : categoryId
-            ? categoriesData?.categories.find(c => c.id === Number(categoryId))?.name ?? null
+            ? categories.find(c => c.id === Number(categoryId))?.name ?? null
             : null
 
   const articleListRef = useRef<ArticleListHandle>(null)
   const revalidateArticles = useCallback(() => articleListRef.current?.revalidate(), [])
+  const handleFetchComplete = useCallback((result: { totalNew: number; error?: boolean; name?: string }) => {
+    const name = result.name ?? ''
+    if (result.error) toast.error(t('toast.fetchError', { name }))
+    else if (result.totalNew > 0) toast.success(t('toast.fetchedArticles', { count: String(result.totalNew), name }))
+    else toast(t('toast.noNewArticles', { name }))
+  }, [t])
+
+  const {
+    renaming,
+    setRenaming,
+    confirm,
+    setConfirm,
+    handleStartRenameFeed,
+    handleMarkAllReadFeed,
+    handleDeleteFeed,
+    handleMoveToCategory,
+    handleUpdateViewType,
+    handleFetchFeed,
+    handleReDetectFeed,
+    handleConfirm,
+    handleRenameSubmit,
+  } = useFeedActions({
+    categorized,
+    mutateFeeds,
+    mutateCategories,
+    startFeedFetch,
+    onFetchComplete: handleFetchComplete,
+    onMarkAllRead: revalidateArticles,
+    onDeleted: () => {
+      if (feedId) void navigate('/inbox')
+    },
+  })
+
+  const showFeedMenu = !!feedId && !!currentFeed
+  const headerAction = showFeedMenu && currentFeed ? (
+    <FeedDropdownMenu
+      feedType={currentFeed.type}
+      categories={categories}
+      onRename={() => handleStartRenameFeed(currentFeed)}
+      onMarkAllRead={() => handleMarkAllReadFeed(currentFeed)}
+      onDelete={() => handleDeleteFeed(currentFeed)}
+      onMoveToCategory={(categoryId) => handleMoveToCategory(currentFeed, categoryId)}
+      currentViewType={currentFeed.view_type}
+      onViewTypeChange={(viewType) => handleUpdateViewType(currentFeed, viewType)}
+      onFetch={() => handleFetchFeed(currentFeed)}
+      onReDetect={() => handleReDetectFeed(currentFeed)}
+      onConfigureNotifications={() => setNotificationFeed(currentFeed)}
+    >
+      <IconButton
+        size="sm"
+        className="shrink-0"
+        aria-label={t('header.feedMenu')}
+      >
+        <Settings2 size={15} strokeWidth={1.5} />
+      </IconButton>
+    </FeedDropdownMenu>
+  ) : undefined
 
   return (
     <PageLayout
       feedName={headerName}
+      headerAction={headerAction}
       feedListProps={{ onMarkAllRead: revalidateArticles, onArticleMoved: revalidateArticles }}
     >
       {isInbox && <HintBanner storageKey="hint-dismissed-inbox">{t('hint.inbox')}</HintBanner>}
@@ -160,6 +243,47 @@ function ArticleListPage() {
       {isHistory && <HintBanner storageKey="hint-dismissed-history">{t('hint.history')}</HintBanner>}
       {isClips && <HintBanner storageKey="hint-dismissed-clips">{t('hint.clips')}</HintBanner>}
       <ArticleList ref={articleListRef} />
+
+      {notificationFeed && (
+        <FeedNotificationDialog
+          feed={notificationFeed}
+          onClose={() => setNotificationFeed(null)}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          title={
+            confirm.type === 'delete-feed' ? t('feeds.deleteFeed')
+              : confirm.type === 'enable-feed' ? t('feeds.reEnableFeed')
+                : t('category.delete')
+          }
+          message={
+            confirm.type === 'delete-feed'
+              ? t('feeds.deleteConfirm', { name: confirm.feed!.name })
+              : confirm.type === 'enable-feed'
+                ? t('feeds.reEnableConfirm')
+                : t('category.deleteConfirm', { name: confirm.category!.name })
+          }
+          confirmLabel={
+            confirm.type === 'delete-feed' ? t('feeds.delete')
+              : confirm.type === 'enable-feed' ? t('feeds.enable')
+                : t('category.delete')
+          }
+          danger={confirm.type !== 'enable-feed'}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
+      {renaming?.type === 'feed' && (
+        <FeedRenameDialog
+          value={renaming.name}
+          onChange={(name) => setRenaming({ ...renaming, name })}
+          onSubmit={handleRenameSubmit}
+          onClose={() => setRenaming(null)}
+        />
+      )}
     </PageLayout>
   )
 }

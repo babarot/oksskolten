@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react'
-import { Pencil, CheckCheck, Trash2, FolderInput, RefreshCw, Search, BellRing } from 'lucide-react'
+import { type ElementType, type ReactNode } from 'react'
+import { Pencil, CheckCheck, Trash2, FolderInput, RefreshCw, Search, BellRing, LayoutTemplate } from 'lucide-react'
 import { useI18n } from '../../lib/i18n'
 import {
   ContextMenu,
@@ -13,6 +13,18 @@ import {
   ContextMenuSubContent,
   ContextMenuSeparator,
 } from '../ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuSeparator,
+} from '../ui/dropdown-menu'
 
 interface FeedMenuProps {
   children: ReactNode
@@ -29,8 +41,21 @@ interface FeedMenuProps {
   onConfigureNotifications?: () => void
 }
 
-export function FeedContextMenu({
-  children,
+type MenuComponentSet = {
+  Item: ElementType
+  RadioGroup: ElementType
+  RadioItem: ElementType
+  Sub: ElementType
+  SubTrigger: ElementType
+  SubContent: ElementType
+  Separator: ElementType
+}
+
+type FeedMenuContentProps = Omit<FeedMenuProps, 'children'> & {
+  components: MenuComponentSet
+}
+
+function FeedMenuContent({
   feedType,
   categories = [],
   onRename,
@@ -42,97 +67,155 @@ export function FeedContextMenu({
   onFetch,
   onReDetect,
   onConfigureNotifications,
-}: FeedMenuProps) {
+  components,
+}: FeedMenuContentProps) {
   const { t } = useI18n()
   const isClip = feedType === 'clip'
+  const {
+    Item,
+    RadioGroup,
+    RadioItem,
+    Sub,
+    SubTrigger,
+    SubContent,
+    Separator,
+  } = components
 
+  return (
+    <>
+      <Item onSelect={onRename}>
+        <Pencil size={16} strokeWidth={1.5} />
+        {t('feeds.rename')}
+      </Item>
+      <Item onSelect={onMarkAllRead}>
+        <CheckCheck size={16} strokeWidth={1.5} />
+        {t('feeds.markAllRead')}
+      </Item>
+
+      {!isClip && onMoveToCategory && (
+        <Sub>
+          <SubTrigger>
+            <FolderInput size={16} strokeWidth={1.5} />
+            {t('category.moveToCategory')}
+          </SubTrigger>
+          <SubContent>
+            <Item onSelect={() => onMoveToCategory(null)}>
+              {t('category.uncategorized')}
+            </Item>
+            {categories.map(cat => (
+              <Item key={cat.id} onSelect={() => onMoveToCategory(cat.id)}>
+                {cat.name}
+              </Item>
+            ))}
+          </SubContent>
+        </Sub>
+      )}
+
+      {!isClip && onViewTypeChange && (
+        <Sub>
+          <SubTrigger>
+            <LayoutTemplate size={16} strokeWidth={1.5} />
+            {t('feeds.viewAs')}
+          </SubTrigger>
+          <SubContent>
+            <RadioGroup value={currentViewType ?? 'auto'}>
+              <RadioItem value="auto" onSelect={() => onViewTypeChange(null)}>
+                {t('feeds.viewType.auto')}
+              </RadioItem>
+              <RadioItem value="article" onSelect={() => onViewTypeChange('article')}>
+                {t('feeds.viewType.article')}
+              </RadioItem>
+              <RadioItem value="social" onSelect={() => onViewTypeChange('social')}>
+                {t('feeds.viewType.social')}
+              </RadioItem>
+            </RadioGroup>
+          </SubContent>
+        </Sub>
+      )}
+
+      {onFetch && !isClip && (
+        <Item onSelect={onFetch}>
+          <RefreshCw size={16} strokeWidth={1.5} />
+          {t('feeds.fetch')}
+        </Item>
+      )}
+
+      {!isClip && onReDetect && (
+        <Item onSelect={onReDetect}>
+          <Search size={16} strokeWidth={1.5} />
+          {t('feeds.reDetect')}
+        </Item>
+      )}
+
+      {!isClip && onConfigureNotifications && (
+        <Item onSelect={onConfigureNotifications}>
+          <BellRing size={16} strokeWidth={1.5} />
+          {t('feeds.pushNotifications')}
+        </Item>
+      )}
+
+      {!isClip && (
+        <>
+          <Separator />
+          <Item onSelect={onDelete} className="text-error">
+            <Trash2 size={16} strokeWidth={1.5} />
+            {t('feeds.delete')}
+          </Item>
+        </>
+      )}
+    </>
+  )
+}
+
+const contextMenuComponents: MenuComponentSet = {
+  Item: ContextMenuItem,
+  RadioGroup: ContextMenuRadioGroup,
+  RadioItem: ContextMenuRadioItem,
+  Sub: ContextMenuSub,
+  SubTrigger: ContextMenuSubTrigger,
+  SubContent: ContextMenuSubContent,
+  Separator: ContextMenuSeparator,
+}
+
+const dropdownMenuComponents: MenuComponentSet = {
+  Item: DropdownMenuItem,
+  RadioGroup: DropdownMenuRadioGroup,
+  RadioItem: DropdownMenuRadioItem,
+  Sub: DropdownMenuSub,
+  SubTrigger: DropdownMenuSubTrigger,
+  SubContent: DropdownMenuSubContent,
+  Separator: DropdownMenuSeparator,
+}
+
+export function FeedContextMenu({
+  children,
+  ...props
+}: FeedMenuProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={onRename}>
-          <Pencil size={16} strokeWidth={1.5} />
-          {t('feeds.rename')}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onMarkAllRead}>
-          <CheckCheck size={16} strokeWidth={1.5} />
-          {t('feeds.markAllRead')}
-        </ContextMenuItem>
-
-        {!isClip && onMoveToCategory && (
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <FolderInput size={16} strokeWidth={1.5} />
-              {t('category.moveToCategory')}
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuItem onSelect={() => onMoveToCategory(null)}>
-                {t('category.uncategorized')}
-              </ContextMenuItem>
-              {categories.map(cat => (
-                <ContextMenuItem key={cat.id} onSelect={() => onMoveToCategory(cat.id)}>
-                  {cat.name}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        )}
-
-        {!isClip && onViewTypeChange && (
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              {t('feeds.viewAs')}
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuRadioGroup value={currentViewType ?? 'auto'}>
-                <ContextMenuRadioItem value="auto" onSelect={() => onViewTypeChange(null)}>
-                  {t('feeds.viewType.auto')}
-                </ContextMenuRadioItem>
-                <ContextMenuRadioItem value="article" onSelect={() => onViewTypeChange('article')}>
-                  {t('feeds.viewType.article')}
-                </ContextMenuRadioItem>
-                <ContextMenuRadioItem value="social" onSelect={() => onViewTypeChange('social')}>
-                  {t('feeds.viewType.social')}
-                </ContextMenuRadioItem>
-              </ContextMenuRadioGroup>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        )}
-
-        {onFetch && !isClip && (
-          <ContextMenuItem onSelect={onFetch}>
-            <RefreshCw size={16} strokeWidth={1.5} />
-            {t('feeds.fetch')}
-          </ContextMenuItem>
-        )}
-
-        {!isClip && onReDetect && (
-          <ContextMenuItem onSelect={onReDetect}>
-            <Search size={16} strokeWidth={1.5} />
-            {t('feeds.reDetect')}
-          </ContextMenuItem>
-        )}
-
-        {!isClip && onConfigureNotifications && (
-          <ContextMenuItem onSelect={onConfigureNotifications}>
-            <BellRing size={16} strokeWidth={1.5} />
-            {t('feeds.pushNotifications')}
-          </ContextMenuItem>
-        )}
-
-        {!isClip && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onSelect={onDelete} className="text-error">
-              <Trash2 size={16} strokeWidth={1.5} />
-              {t('feeds.delete')}
-            </ContextMenuItem>
-          </>
-        )}
+        <FeedMenuContent components={contextMenuComponents} {...props} />
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+export function FeedDropdownMenu({
+  children,
+  ...props
+}: FeedMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        {children}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <FeedMenuContent components={dropdownMenuComponents} {...props} />
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

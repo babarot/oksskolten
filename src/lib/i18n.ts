@@ -30,6 +30,7 @@ const dict = {
   // Header
   'header.menu': { ja: 'メニュー', en: 'Menu' },
   'header.back': { ja: '戻る', en: 'Back' },
+  'header.feedMenu': { ja: 'フィードメニュー', en: 'Feed menu' },
   'header.modeSystem': { ja: 'システム', en: 'System' },
   'header.modeDark': { ja: 'ダークモード', en: 'Dark' },
   'header.modeLight': { ja: 'ライトモード', en: 'Light' },
@@ -887,6 +888,7 @@ type MessageKey = keyof typeof dict
 const zhOverrides: Partial<Record<MessageKey, string>> = {
   'header.menu': '菜单',
   'header.back': '返回',
+  'header.feedMenu': 'Feed 菜单',
   'header.modeSystem': '跟随系统',
   'header.modeDark': '深色',
   'header.modeLight': '浅色',
