@@ -130,18 +130,33 @@ EOF
 deploy_remote_image() {
   local remote_cmd
   printf -v remote_cmd \
-    'REMOTE_DIR=%q PROJECT_NAME=%q DATA_DIR=%q SERVER_IMAGE=%q MEILI_MASTER_KEY=%q TUNNEL_TOKEN=%q GHCR_USERNAME=%q GHCR_TOKEN=%q EXPECTED_GIT_COMMIT=%q EXPECTED_GIT_TAG=%q EXPECTED_BUILD_DATE=%q bash -s' \
+    'REMOTE_DIR=%q PROJECT_NAME=%q DATA_DIR=%q SERVER_IMAGE=%q bash -s' \
     "$REMOTE_DIR" \
     "$PROJECT_NAME" \
     "$DATA_DIR" \
-    "$SERVER_IMAGE" \
-    "$MEILI_MASTER_KEY" \
-    "$TUNNEL_TOKEN" \
-    "$GHCR_USERNAME" \
-    "$GHCR_TOKEN" \
-    "$EXPECTED_GIT_COMMIT" \
-    "$EXPECTED_GIT_TAG" \
-    "$EXPECTED_BUILD_DATE"
+    "$SERVER_IMAGE"
+
+  if [[ -n "$MEILI_MASTER_KEY" ]]; then
+    printf -v remote_cmd '%s MEILI_MASTER_KEY=%q' "$remote_cmd" "$MEILI_MASTER_KEY"
+  fi
+  if [[ -n "$TUNNEL_TOKEN" ]]; then
+    printf -v remote_cmd '%s TUNNEL_TOKEN=%q' "$remote_cmd" "$TUNNEL_TOKEN"
+  fi
+  if [[ -n "$GHCR_USERNAME" ]]; then
+    printf -v remote_cmd '%s GHCR_USERNAME=%q' "$remote_cmd" "$GHCR_USERNAME"
+  fi
+  if [[ -n "$GHCR_TOKEN" ]]; then
+    printf -v remote_cmd '%s GHCR_TOKEN=%q' "$remote_cmd" "$GHCR_TOKEN"
+  fi
+  if [[ -n "$EXPECTED_GIT_COMMIT" ]]; then
+    printf -v remote_cmd '%s EXPECTED_GIT_COMMIT=%q' "$remote_cmd" "$EXPECTED_GIT_COMMIT"
+  fi
+  if [[ -n "$EXPECTED_GIT_TAG" ]]; then
+    printf -v remote_cmd '%s EXPECTED_GIT_TAG=%q' "$remote_cmd" "$EXPECTED_GIT_TAG"
+  fi
+  if [[ -n "$EXPECTED_BUILD_DATE" ]]; then
+    printf -v remote_cmd '%s EXPECTED_BUILD_DATE=%q' "$remote_cmd" "$EXPECTED_BUILD_DATE"
+  fi
 
   remote_exec "$remote_cmd" <<'EOF'
 set -euo pipefail
@@ -150,13 +165,13 @@ remote_dir="$REMOTE_DIR"
 project_name="$PROJECT_NAME"
 data_dir="$DATA_DIR"
 server_image="$SERVER_IMAGE"
-meili_master_key="$MEILI_MASTER_KEY"
-tunnel_token="$TUNNEL_TOKEN"
-ghcr_username="$GHCR_USERNAME"
-ghcr_token="$GHCR_TOKEN"
-expected_git_commit="$EXPECTED_GIT_COMMIT"
-expected_git_tag="$EXPECTED_GIT_TAG"
-expected_build_date="$EXPECTED_BUILD_DATE"
+meili_master_key="${MEILI_MASTER_KEY-}"
+tunnel_token="${TUNNEL_TOKEN-}"
+ghcr_username="${GHCR_USERNAME-}"
+ghcr_token="${GHCR_TOKEN-}"
+expected_git_commit="${EXPECTED_GIT_COMMIT-}"
+expected_git_tag="${EXPECTED_GIT_TAG-}"
+expected_build_date="${EXPECTED_BUILD_DATE-}"
 
 cd "$remote_dir"
 touch .env
@@ -238,7 +253,7 @@ rollback_to_previous() {
   echo "Rolling back remote server image to ${previous_server_image}" >&2
   set_env SERVER_IMAGE "$previous_server_image"
   compose pull server || true
-  compose up -d meilisearch rss-bridge flaresolverr server || true
+  compose up -d --no-deps server || true
   if wait_for_server_health; then
     if compose ps -q cloudflared >/dev/null 2>&1; then
       compose restart cloudflared || true
@@ -282,7 +297,7 @@ if [[ -n "$tunnel_token" ]]; then
 fi
 
 compose pull server
-compose up -d meilisearch rss-bridge flaresolverr server
+compose up -d --no-deps server
 wait_for_server_health
 
 health_json="$(curl --fail --silent --show-error http://127.0.0.1:3000/api/health)"
@@ -351,7 +366,7 @@ wait_for_server_health() {
 
 set_env SERVER_IMAGE "$previous_server_image"
 compose pull server
-compose up -d meilisearch rss-bridge flaresolverr server
+compose up -d --no-deps server
 wait_for_server_health
 
 cloudflared_cid="$(compose ps -q cloudflared || true)"
