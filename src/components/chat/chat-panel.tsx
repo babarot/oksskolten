@@ -73,13 +73,15 @@ export function ChatPanel({ variant, chatState: externalChatState, scope, scopeS
   } = chat
 
   // Notify parent when a new conversation is created (for URL update etc.)
+  // Wait until streaming completes so the assistant response is persisted
+  // before any navigation unmounts this component.
   const notifiedRef = useRef<string | null>(initialConversationId ?? null)
   useEffect(() => {
-    if (currentConversationId && currentConversationId !== notifiedRef.current && onConversationCreated) {
+    if (currentConversationId && currentConversationId !== notifiedRef.current && !streaming && onConversationCreated) {
       notifiedRef.current = currentConversationId
       onConversationCreated(currentConversationId)
     }
-  }, [currentConversationId, onConversationCreated])
+  }, [currentConversationId, streaming, onConversationCreated])
 
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(false)
