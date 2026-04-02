@@ -22,6 +22,7 @@ import { useAppLayout } from '../../app'
 import { Skeleton } from '../ui/skeleton'
 import { Callout } from '../ui/callout'
 import { rewriteBlockedXVideos } from '../../lib/x-video-fallback'
+import { buildArticleScope, summarizeScope } from '../../lib/chat-scope'
 import { ArticleToolbar } from './article-toolbar'
 import { ArticleSummarySection } from './article-summary-section'
 import { ArticleTranslationBanner } from './article-translation-banner'
@@ -195,6 +196,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
   const hasTranslation = !!fullTextTranslated
   const displayTitle = article.has_video && !article.title.trim() ? t('article.videoPost') : article.title
   const metricsText = metrics.metrics && !translating ? metrics.formatMetrics() : null
+  const articleScopeSummary = summarizeScope(buildArticleScope(article.id), t, displayTitle)
 
   const detailContent = article.feed_view_type === 'social' ? (
     <SocialArticleDetail
@@ -231,6 +233,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
       onArchiveImages={handleArchiveImages}
       onDelete={() => setDeleteConfirmOpen(true)}
       onCloseChat={chat.close}
+      scopeSummary={articleScopeSummary}
     />
   ) : (
     <article ref={articleRef} className="article-card max-w-2xl mx-auto px-6 md:px-10 py-8">
@@ -266,7 +269,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
 
       {/* Inline Chat Panel */}
       {chatPosition === 'inline' && chat.open && (
-        <ChatInlinePanel articleId={article.id} onClose={chat.close} />
+        <ChatInlinePanel articleId={article.id} onClose={chat.close} scopeSummary={articleScopeSummary} />
       )}
 
       {/* Summary */}
@@ -329,7 +332,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
     <>
     {detailContent}
     <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
-    {chatPosition === 'fab' && article && <ChatFab key={article.id} articleId={article.id} />}
+    {chatPosition === 'fab' && article && <ChatFab key={article.id} articleId={article.id} scopeSummary={articleScopeSummary} />}
     {deleteConfirmOpen && (
       <ConfirmDialog
         title={t('article.delete')}

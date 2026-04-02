@@ -13,6 +13,7 @@ import {
 } from './db.js'
 import { hashSync } from 'bcryptjs'
 import { afterEach } from 'vitest'
+import { MAX_SCOPE_ARTICLES, serializeChatScope } from './chat/scope.js'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -50,10 +51,11 @@ let app: Awaited<ReturnType<typeof buildApp>>
 let savedAuthDisabled: string | undefined
 const json = { 'content-type': 'application/json' }
 
-function seedUser() {
+function seedUser(): number {
   const db = getDb()
   const hash = hashSync('testpass', 4)
   db.prepare('INSERT OR REPLACE INTO users (email, password_hash) VALUES (?, ?)').run('test@example.com', hash)
+  return (db.prepare('SELECT id FROM users WHERE email = ?').get('test@example.com') as { id: number }).id
 }
 
 function getToken(): string {
@@ -168,6 +170,153 @@ describe('POST /api/chat with article_id', () => {
     expect(callArgs.system).toContain('(truncated)')
     // Should not contain the full 5000 chars
     expect(callArgs.system.length).toBeLessThan(longText.length)
+  })
+
+  it('persists legacy article_id requests as article scope', async () => {
+    seedUser()
+    const token = getToken()
+    const feed = createFeed({ name: 'Scoped Feed', url: 'https://example.com' })
+    const articleId = insertArticle({
+      feed_id: feed.id,
+      title: 'Scoped Article',
+      url: 'https://example.com/scoped',
+      published_at: null,
+      full_text: 'Scoped body',
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/chat',
+      headers: { ...json, authorization: `Bearer ${token}` },
+      payload: { message: 'Use article scope', article_id: articleId },
+    })
+
+    const events = parseSSEEvents(res.body)
+    const convId = events.find((e: any) => e.type === 'conversation_id')!.conversation_id
+    const conv = getConversationById(convId)
+    expect(conv?.scope_type).toBe('article')
+    expect(conv?.scope_payload_json).toBe(JSON.stringify({ type: 'article', article_id: articleId }))
+  })
+})
+
+describe('POST /api/chat scope persistence', () => {
+  it('resolves filtered_list to a persisted capped snapshot', async () => {
+    const userId = seedUser()
+    const token = getToken()
+    const feed = createFeed({ name: 'List Feed', url: 'https://example.com/list' }, userId)
+
+    for (let i = 0; i < MAX_SCOPE_ARTICLES + 15; i++) {
+      insertArticle({
+        user_id: userId,
+        feed_id: feed.id,
+        title: `Article ${i}`,
+        url: `https://example.com/list/${i}`,
+        published_at: `2025-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+      })
+    }
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/chat',
+      headers: { ...json, authorization: `Bearer ${token}` },
+      payload: {
+        message: 'Talk about current filtered list',
+        scope: {
+          type: 'list',
+          mode: 'filtered_list',
+          label: 'Unread in feed',
+          source_filters: { feed_id: feed.id, unread: true },
+        },
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const events = parseSSEEvents(res.body)
+    const convId = events.find((e: any) => e.type === 'conversation_id')!.conversation_id
+    const conv = getConversationById(convId)
+    const payload = JSON.parse(conv!.scope_payload_json!)
+
+    expect(conv?.scope_type).toBe('list')
+    expect(payload.type).toBe('list')
+    expect(payload.mode).toBe('filtered_list')
+    expect(payload.label).toBe('Unread in feed')
+    expect(payload.count_total).toBe(MAX_SCOPE_ARTICLES + 15)
+    expect(payload.count_scoped).toBe(MAX_SCOPE_ARTICLES)
+    expect(payload.article_ids).toHaveLength(MAX_SCOPE_ARTICLES)
+    expect(payload.source_filters).toEqual({ feed_id: feed.id, unread: true })
+  })
+
+  it('rejects scope drift on existing conversations', async () => {
+    seedUser()
+    const token = getToken()
+    const serialized = serializeChatScope({ type: 'global' })
+    createConversation({
+      id: 'conv-scope-mismatch',
+      article_id: serialized.article_id,
+      scope_type: serialized.scope_type,
+      scope_payload_json: serialized.scope_payload_json,
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/chat',
+      headers: { ...json, authorization: `Bearer ${token}` },
+      payload: {
+        conversation_id: 'conv-scope-mismatch',
+        message: 'switch scope',
+        scope: { type: 'article', article_id: 123 },
+      },
+    })
+
+    expect(res.statusCode).toBe(409)
+    expect(res.json()).toEqual({ error: 'Conversation scope mismatch' })
+  })
+
+  it('restores persisted scope when continuing a conversation without resending scope', async () => {
+    seedUser()
+    const token = getToken()
+    const feed = createFeed({ name: 'Persisted Scope Feed', url: 'https://example.com/persisted' })
+    const inScopeId = insertArticle({
+      feed_id: feed.id,
+      title: 'In scope',
+      url: 'https://example.com/persisted/in',
+      published_at: '2025-01-01T00:00:00Z',
+    })
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Out of scope',
+      url: 'https://example.com/persisted/out',
+      published_at: '2025-01-02T00:00:00Z',
+    })
+    const storedScope = {
+      type: 'list' as const,
+      mode: 'loaded_list' as const,
+      label: 'Persisted list',
+      count_total: 1,
+      count_scoped: 1,
+      article_ids: [inScopeId],
+    }
+    const serialized = serializeChatScope(storedScope)
+    createConversation({
+      id: 'conv-resume-scope',
+      article_id: serialized.article_id,
+      scope_type: serialized.scope_type,
+      scope_payload_json: serialized.scope_payload_json,
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/chat',
+      headers: { ...json, authorization: `Bearer ${token}` },
+      payload: {
+        conversation_id: 'conv-resume-scope',
+        message: 'continue with stored scope',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const callArgs = mockRunChatTurn.mock.calls[0][1]
+    expect(callArgs.scope).toEqual(storedScope)
   })
 })
 
@@ -326,5 +475,44 @@ describe('GET /api/chat/conversations — message_count', () => {
     expect(conv).toBeDefined()
     expect(conv.message_count).toBe(2)
   })
-})
 
+  it('returns scope_type and scope_summary for scoped conversations', async () => {
+    const userId = seedUser()
+    const token = getToken()
+    const feed = createFeed({ name: 'Summary Feed', url: 'https://example.com/summary' }, userId)
+    const articleId = insertArticle({
+      user_id: userId,
+      feed_id: feed.id,
+      title: 'Summary Article',
+      url: 'https://example.com/summary/article',
+      published_at: '2025-01-01T00:00:00Z',
+    })
+    const serialized = serializeChatScope({ type: 'article', article_id: articleId })
+    createConversation({
+      id: 'conv-summary',
+      article_id: serialized.article_id,
+      scope_type: serialized.scope_type,
+      scope_payload_json: serialized.scope_payload_json,
+    })
+    insertChatMessage({
+      conversation_id: 'conv-summary',
+      role: 'user',
+      content: JSON.stringify([{ type: 'text', text: 'hello' }]),
+    })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/chat/conversations',
+      headers: { authorization: `Bearer ${token}` },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const { conversations } = res.json()
+    const conv = conversations.find((c: any) => c.id === 'conv-summary')
+    expect(conv.scope_type).toBe('article')
+    expect(conv.scope_summary).toMatchObject({
+      type: 'article',
+      detail: 'Summary Article',
+    })
+  })
+})

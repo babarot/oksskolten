@@ -181,8 +181,8 @@ function renderArticleList(initialPath = '/inbox') {
       <LocaleContext.Provider value={{ locale: 'en', setLocale: vi.fn() }}>
         <Routes>
           <Route element={<OutletWrapper />}>
-            <Route path="feeds/:feedId" element={<ArticleList />} />
-            <Route path="*" element={<ArticleList />} />
+            <Route path="feeds/:feedId" element={<ArticleList listLabel="Test List" />} />
+            <Route path="*" element={<ArticleList listLabel="Test List" />} />
           </Route>
         </Routes>
       </LocaleContext.Provider>

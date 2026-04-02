@@ -756,8 +756,11 @@ export function searchArticles(opts: {
   feed_id?: number
   category_id?: number
   unread?: boolean
+  read?: boolean
   bookmarked?: boolean
   liked?: boolean
+  article_kind?: ArticleKind
+  article_ids?: number[]
   since?: string
   until?: string
   limit?: number
@@ -781,14 +784,28 @@ export function searchArticles(opts: {
     conditions.push('a.category_id = @category_id')
     params.category_id = opts.category_id
   }
+  if (opts.article_kind) {
+    conditions.push('a.article_kind = @article_kind')
+    params.article_kind = opts.article_kind
+  }
   if (opts.unread !== undefined) {
     conditions.push(opts.unread ? 'a.seen_at IS NULL' : 'a.seen_at IS NOT NULL')
+  }
+  if (opts.read !== undefined) {
+    conditions.push(opts.read ? 'a.read_at IS NOT NULL' : 'a.read_at IS NULL')
   }
   if (opts.bookmarked) {
     conditions.push('a.bookmarked_at IS NOT NULL')
   }
   if (opts.liked) {
     conditions.push('a.liked_at IS NOT NULL')
+  }
+  if (opts.article_ids?.length) {
+    const placeholders = opts.article_ids.map((_, i) => `@article_id_${i}`).join(', ')
+    conditions.push(`a.id IN (${placeholders})`)
+    opts.article_ids.forEach((id, i) => { params[`article_id_${i}`] = id })
+  } else if (opts.article_ids) {
+    return []
   }
   if (opts.since) {
     conditions.push('a.published_at >= @since')

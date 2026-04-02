@@ -62,6 +62,30 @@ describe('Conversations', () => {
     expect(conv.article_id).toBe(articleId)
   })
 
+  it('stores and returns persisted scope metadata', () => {
+    const scopePayload = JSON.stringify({
+      type: 'list',
+      mode: 'loaded_list',
+      label: 'Current list',
+      count_total: 2,
+      count_scoped: 2,
+      article_ids: [1, 2],
+    })
+
+    const conv = createConversation({
+      id: 'conv-scope',
+      scope_type: 'list',
+      scope_payload_json: scopePayload,
+    })
+
+    expect(conv.scope_type).toBe('list')
+    expect(conv.scope_payload_json).toBe(scopePayload)
+
+    const found = getConversationById('conv-scope')
+    expect(found?.scope_type).toBe('list')
+    expect(found?.scope_payload_json).toBe(scopePayload)
+  })
+
   it('getConversationById returns undefined for non-existent', () => {
     expect(getConversationById('nonexistent')).toBeUndefined()
   })

@@ -27,6 +27,7 @@ import { apiPatch } from '../../lib/fetcher'
 import type { ArticleListItem, FeedWithCounts } from '../../../shared/types'
 import type { LayoutName } from '../../data/layouts'
 import { isXFeedSource, type ArticleKind } from '../../../shared/article-kind'
+import { buildFilteredListScope, buildLoadedListScope } from '../../lib/chat-scope'
 
 interface ArticlesResponse {
   articles: ArticleListItem[]
@@ -45,7 +46,11 @@ export interface ArticleListHandle {
   revalidate: () => void
 }
 
-export const ArticleList = forwardRef<ArticleListHandle, object>(function ArticleList(_props, ref) {
+interface ArticleListProps {
+  listLabel: string
+}
+
+export const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(function ArticleList({ listLabel }, ref) {
   const location = useLocation()
   const navigate = useNavigate()
   const { feedId: feedIdParam, categoryId: categoryIdParam } = useParams<{ feedId?: string; categoryId?: string }>()
@@ -389,6 +394,24 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     { value: 'repost', label: t('articleKind.repost') },
     { value: 'quote', label: t('articleKind.quote') },
   ]
+  const sourceFilters = useMemo(() => ({
+    ...(feedId ? { feed_id: feedId } : {}),
+    ...(categoryId ? { category_id: categoryId } : {}),
+    ...(unreadOnly ? { unread: true } : {}),
+    ...(bookmarkedOnly ? { bookmarked: true } : {}),
+    ...(likedOnly ? { liked: true } : {}),
+    ...(readOnly ? { read: true } : {}),
+    ...(articleKindFilter !== 'all' ? { article_kind: articleKindFilter } : {}),
+    ...(noFloor ? { no_floor: true } : {}),
+  }), [feedId, categoryId, unreadOnly, bookmarkedOnly, likedOnly, readOnly, articleKindFilter, noFloor])
+  const loadedScope = useMemo(
+    () => buildLoadedListScope(listLabel, articles.map(article => article.id), sourceFilters),
+    [listLabel, articles, sourceFilters],
+  )
+  const filteredScope = useMemo(
+    () => buildFilteredListScope(listLabel, sourceFilters),
+    [listLabel, sourceFilters],
+  )
 
   return (
     <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
@@ -407,6 +430,23 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
       {currentFeed && currentFeed.type !== 'clip' && settings.showFeedActivity === 'on' && (
         <FeedMetricsBar feed={currentFeed} />
       )}
+
+      <div className="flex flex-wrap gap-2 px-4 md:px-6 py-3">
+        <ActionChip
+          onClick={() => void navigate('/chat', {
+            state: {
+              initialScope: loadedScope,
+              scopeOptions: {
+                loadedList: loadedScope,
+                filteredList: filteredScope,
+              },
+            },
+          })}
+          disabled={articles.length === 0}
+        >
+          {t('chat.currentList')}
+        </ActionChip>
+      </div>
 
       {showArticleKindFilter && (
         <div className="flex flex-wrap gap-2 px-4 md:px-6 py-3">

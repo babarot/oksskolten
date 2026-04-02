@@ -13,6 +13,8 @@ import { ChatInputArea } from './chat-input-area'
 import { ChatMessages } from './chat-messages'
 import { ChatPromptSuggestion } from './chat-prompt-suggestion'
 import { ChatLinkedArticle } from './chat-linked-article'
+import { ChatScopeBadge } from './chat-scope-badge'
+import type { ChatScope, ScopeSummary } from '../../../shared/types'
 
 interface ToolStatus {
   name: string
@@ -35,9 +37,9 @@ export interface ChatState {
 interface ChatPanelProps {
   variant: 'full' | 'inline'
   chatState?: ChatState
-  articleId?: number
+  scope?: ChatScope
+  scopeSummary?: ScopeSummary | null
   conversationId?: string
-  context?: 'home'
   onConversationCreated?: (id: string) => void
   onClose?: () => void
 }
@@ -51,11 +53,12 @@ interface Conversation {
   article_og_image?: string | null
 }
 
-export function ChatPanel({ variant, chatState: externalChatState, articleId, conversationId: initialConversationId, context, onConversationCreated, onClose }: ChatPanelProps) {
+export function ChatPanel({ variant, chatState: externalChatState, scope, scopeSummary, conversationId: initialConversationId, onConversationCreated, onClose }: ChatPanelProps) {
   const { t } = useI18n()
+  const articleId = scope?.type === 'article' ? scope.article_id : undefined
 
   // Use external chat state if provided, otherwise create internal one
-  const internalChatState = useChat(articleId, context)
+  const internalChatState = useChat(scope)
   const chat = externalChatState ?? internalChatState
 
   const {
@@ -170,7 +173,7 @@ export function ChatPanel({ variant, chatState: externalChatState, articleId, co
     <>
       {isInline && messages.length === 0 && !streaming && (
         <ChatPromptSuggestion
-          context={context}
+          context={scope?.type === 'global' ? 'home' : undefined}
           onSelect={(prompt, suggestionKey) => { void sendMessage(prompt, { suggestionKey }); setInput('') }}
         />
       )}
@@ -207,7 +210,12 @@ export function ChatPanel({ variant, chatState: externalChatState, articleId, co
           <div className="bg-bg-card rounded-xl border border-border w-full max-w-3xl h-full max-h-[90vh] flex flex-col animate-[fade-in_150ms_ease] pointer-events-auto">
             {/* header */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-border select-none" style={{ paddingTop: 'var(--safe-area-inset-top)' }}>
-              <span className="text-sm font-medium text-text">{t('chat.title')}</span>
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-text">{t('chat.title')}</span>
+                <div className="mt-1">
+                  <ChatScopeBadge summary={scopeSummary} />
+                </div>
+              </div>
               <IconButton
                 onClick={() => setExpanded(false)}
                 className="p-1 w-auto h-auto hover:bg-hover"
@@ -232,7 +240,12 @@ export function ChatPanel({ variant, chatState: externalChatState, articleId, co
         {/* Keep inline container in DOM so React doesn't unmount useChat state */}
         <div className="flex flex-col border border-border rounded-lg overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-border select-none">
-            <span className="text-sm font-medium text-text">{t('chat.title')}</span>
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-text">{t('chat.title')}</span>
+              <div className="mt-1">
+                <ChatScopeBadge summary={scopeSummary} />
+              </div>
+            </div>
             <IconButton
               onClick={() => setExpanded(true)}
               className="p-1 w-auto h-auto hover:bg-hover"
@@ -253,7 +266,12 @@ export function ChatPanel({ variant, chatState: externalChatState, articleId, co
       <div className="flex flex-col border border-border rounded-lg overflow-hidden">
         {/* header bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border select-none">
-          <span className="text-sm font-medium text-text">{t('chat.title')}</span>
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-text">{t('chat.title')}</span>
+            <div className="mt-1">
+              <ChatScopeBadge summary={scopeSummary} />
+            </div>
+          </div>
           <div className="flex items-center gap-0.5">
             <IconButton
               onClick={() => setExpanded(true)}
@@ -300,6 +318,7 @@ export function ChatPanel({ variant, chatState: externalChatState, articleId, co
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overscroll-contain">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
+          <ChatScopeBadge summary={scopeSummary} />
           {linkedArticle && (
             <ChatLinkedArticle
               title={linkedArticle.title}

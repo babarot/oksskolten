@@ -3,12 +3,15 @@ import { MessagesSquare } from 'lucide-react'
 import useSWR from 'swr'
 import { ChatPanel } from './chat-panel'
 import { fetcher } from '../../lib/fetcher'
+import { buildArticleScope } from '../../lib/chat-scope'
+import type { ScopeSummary } from '../../../shared/types'
 
 interface ChatFabProps {
   articleId: number
+  scopeSummary?: ScopeSummary | null
 }
 
-export function ChatFab({ articleId }: ChatFabProps) {
+export function ChatFab({ articleId, scopeSummary }: ChatFabProps) {
   const [panelOpen, setPanelOpen] = useState(false)
   // Track whether panel has ever been opened — mount ChatPanel only after first open,
   // then keep it alive (hidden) so useChat state is preserved.
@@ -51,7 +54,7 @@ export function ChatFab({ articleId }: ChatFabProps) {
       {/* Floating chat panel — only mount after first open, then use hidden to preserve state */}
       {mounted && (
         <div className={`fixed bottom-[calc(5rem+var(--safe-area-inset-bottom))] left-4 right-4 md:left-auto md:right-6 md:w-[380px] z-50 max-h-[500px] flex flex-col bg-bg-card rounded-xl border border-border shadow-lg ${panelOpen ? '' : 'hidden'}`}>
-          <ChatPanel variant="inline" articleId={articleId} onClose={() => setPanelOpen(false)} />
+          <ChatPanel variant="inline" scope={buildArticleScope(articleId)} scopeSummary={scopeSummary} onClose={() => setPanelOpen(false)} />
         </div>
       )}
 

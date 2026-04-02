@@ -19,7 +19,7 @@ export async function runToolLoop(
   params: ChatTurnParams,
   callProvider: ProviderCallFn,
 ): Promise<RunChatTurnResult> {
-  const { messages, onEvent, timeZone } = params
+  const { messages, onEvent, timeZone, scope } = params
   const allMessages = [...messages]
   let totalUsage = { input_tokens: 0, output_tokens: 0 }
 
@@ -43,7 +43,7 @@ export async function runToolLoop(
     const settled = await Promise.allSettled(
       toolUseBlocks.map(async (toolUse) => {
         try {
-          const r = await executeTool(toolUse.name, toolUse.input, { timeZone })
+          const r = await executeTool(toolUse.name, toolUse.input, { timeZone, scope })
           return { type: 'tool_result' as const, tool_use_id: toolUse.id, content: r }
         } catch (err) {
           return {

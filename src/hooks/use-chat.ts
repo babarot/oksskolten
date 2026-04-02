@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { fetcher, streamPostChat, type ChatSSEEvent } from '../lib/fetcher'
+import type { ChatScope } from '../../shared/types'
 
 export interface ChatUsage {
   input_tokens: number
@@ -19,7 +20,7 @@ interface ToolStatus {
   tool_use_id: string
 }
 
-export function useChat(articleId?: number, context?: 'home') {
+export function useChat(scope?: ChatScope) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
@@ -48,8 +49,9 @@ export function useChat(articleId?: number, context?: 'home') {
         {
           message: text,
           conversation_id: conversationId ?? undefined,
-          article_id: articleId,
-          context,
+          article_id: scope?.type === 'article' ? scope.article_id : undefined,
+          context: scope?.type === 'global' ? 'home' : undefined,
+          scope,
           suggestion_key: opts?.suggestionKey,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
@@ -125,7 +127,7 @@ export function useChat(articleId?: number, context?: 'home') {
       setThinking(false)
       setActiveTool(null)
     }
-  }, [conversationId, articleId, context, streaming])
+  }, [conversationId, scope, streaming])
 
   const loadConversation = useCallback(async (id: string) => {
     let data: { messages: Array<{ role: string; content: string }> }

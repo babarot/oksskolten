@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useChat } from './use-chat'
+import { buildArticleScope } from '../lib/chat-scope'
 
 // Capture the onEvent callback from streamPostChat so we can simulate events
 let capturedOnEvent: ((event: any) => void) | null = null
@@ -40,7 +41,7 @@ describe('useChat', () => {
   })
 
   it('adds user and placeholder assistant message on sendMessage', async () => {
-    const { result } = renderHook(() => useChat(42))
+    const { result } = renderHook(() => useChat(buildArticleScope(42)))
 
     await act(async () => {
       result.current.sendMessage('hello')

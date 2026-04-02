@@ -36,7 +36,7 @@ export async function streamPost(
 
 export async function streamPostChat(
   url: string,
-  body: { message: string; conversation_id?: string; article_id?: number; context?: 'home'; suggestion_key?: string },
+  body: { message: string; conversation_id?: string; article_id?: number; context?: 'home'; scope?: import('../../shared/types').ChatScope; suggestion_key?: string },
   onEvent: (event: { type: string; text?: string; conversation_id?: string; usage?: { input_tokens: number; output_tokens: number }; elapsed_ms?: number; model?: string }) => void,
 ): Promise<void> {
   return demoStreamPostChat(url, body, onEvent)

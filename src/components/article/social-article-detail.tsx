@@ -10,7 +10,7 @@ import { ChatInlinePanel } from '../chat/chat-inline'
 import { formatDetailDate } from '../../lib/dateFormat'
 import { useI18n } from '../../lib/i18n'
 import { extractXHandle } from '../../../shared/article-kind'
-import type { ArticleDetail as ArticleDetailData } from '../../../shared/types'
+import type { ArticleDetail as ArticleDetailData, ScopeSummary } from '../../../shared/types'
 
 interface SocialArticleDetailProps {
   articleRef: RefObject<HTMLElement | null>
@@ -46,6 +46,7 @@ interface SocialArticleDetailProps {
   onArchiveImages: () => void
   onDelete: () => void
   onCloseChat: () => void
+  scopeSummary?: ScopeSummary | null
 }
 
 function getSocialAvatar(article: ArticleDetailData): string | null {
@@ -101,6 +102,7 @@ export function SocialArticleDetail({
   onArchiveImages,
   onDelete,
   onCloseChat,
+  scopeSummary,
 }: SocialArticleDetailProps) {
   const { t, tError, isKeyNotSetError } = useI18n()
   const handle = extractXHandle(article.url)
@@ -164,7 +166,7 @@ export function SocialArticleDetail({
       />
 
       {chatPosition === 'inline' && chatOpen && (
-        <ChatInlinePanel articleId={article.id} onClose={onCloseChat} />
+        <ChatInlinePanel articleId={article.id} onClose={onCloseChat} scopeSummary={scopeSummary} />
       )}
 
       <ArticleSummarySection

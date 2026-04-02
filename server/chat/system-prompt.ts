@@ -1,5 +1,6 @@
 import { getArticleById, getSetting } from '../db.js'
 import { DEFAULT_LANGUAGE, languageName } from '../../shared/lang.js'
+import type { ChatScope, ListChatScope } from '../../shared/types.js'
 
 const ARTICLE_CONTEXT_MAX_CHARS = 10000
 
@@ -8,7 +9,7 @@ function getUserLanguage(): string {
   return getSetting('general.language') || DEFAULT_LANGUAGE
 }
 
-export function buildSystemPrompt(context?: 'home'): string {
+export function buildSystemPrompt(scope?: ChatScope): string {
   const today = new Date().toISOString().slice(0, 10)
   const lang = getUserLanguage()
   let prompt = `You are an AI assistant for an RSS reader application.
@@ -35,12 +36,29 @@ For article links, always use the url field returned by tools as-is (app-interna
 - When listing articles, include the beginning of the summary so the user can judge whether it's worth reading
 - Never end with just "not found" — suggest alternatives or retry with relaxed criteria`
 
-  if (context === 'home') {
+  if (!scope || scope.type === 'global') {
     prompt += `\n\nThe user is chatting from the article list (home screen). There is no specific article context.
 Help the user explore and discover articles. Follow the recommendation guidelines above and proactively suggest articles matching their interests.`
   }
 
+  if (scope?.type === 'list') {
+    prompt += buildListScopePrompt(scope)
+  }
+
   return prompt
+}
+
+export function buildListScopePrompt(scope: ListChatScope): string {
+  return `\n\n## Current list scope
+The user is chatting about a specific article list snapshot.
+- **List**: ${scope.label}
+- **Scope mode**: ${scope.mode}
+- **Scoped articles**: ${scope.count_scoped}
+- **Total matching articles**: ${scope.count_total}
+
+All article searches and article actions are restricted to this list snapshot.
+If a tool reports that an article is outside the current scope, explain the current scope and suggest switching to global chat if the user wants to go broader.
+When answering questions like "what's in this list?" or "compare the articles here", stay within this list snapshot.`
 }
 
 export function appendArticleContext(systemPrompt: string, articleId: number): string {

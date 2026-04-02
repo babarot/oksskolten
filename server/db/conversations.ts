@@ -10,17 +10,21 @@ export function createConversation(data: {
   id: string
   title?: string | null
   article_id?: number | null
+  scope_type?: 'global' | 'article' | 'list' | null
+  scope_payload_json?: string | null
   user_id?: number | null
 }): Conversation {
   const scopedUserId = data.user_id ?? resolveUserId()
   runNamed(`
-    INSERT INTO conversations (id, user_id, title, article_id)
-    VALUES (@id, @user_id, @title, @article_id)
+    INSERT INTO conversations (id, user_id, title, article_id, scope_type, scope_payload_json)
+    VALUES (@id, @user_id, @title, @article_id, @scope_type, @scope_payload_json)
   `, {
     id: data.id,
     user_id: scopedUserId ?? null,
     title: data.title ?? null,
     article_id: data.article_id ?? null,
+    scope_type: data.scope_type ?? null,
+    scope_payload_json: data.scope_payload_json ?? null,
   })
   return getDb().prepare('SELECT * FROM conversations WHERE id = ?').get(data.id) as Conversation
 }

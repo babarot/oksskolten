@@ -2,15 +2,52 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import type { Message, TextBlock } from './chat/types.js'
-import { requireAuth, requireJson } from './auth.js'
+import { requireAuth, requireJson, getRequestUserId } from './auth.js'
 import { startSSE } from './lib/sse.js'
 import { StringIdParams, parseOrBadRequest } from './lib/validation.js'
+import type { ArticleDetail } from './db.js'
+import type { ChatScope } from '../shared/types.js'
+
+const ScopeFiltersSchema = z.object({
+  feed_id: z.number().optional(),
+  category_id: z.number().optional(),
+  unread: z.boolean().optional(),
+  bookmarked: z.boolean().optional(),
+  liked: z.boolean().optional(),
+  read: z.boolean().optional(),
+  article_kind: z.enum(['original', 'repost', 'quote']).optional(),
+  no_floor: z.boolean().optional(),
+})
+
+const ChatScopeSchema = z.union([
+  z.object({
+    type: z.literal('global'),
+  }),
+  z.object({
+    type: z.literal('article'),
+    article_id: z.number(),
+  }),
+  z.object({
+    type: z.literal('list'),
+    mode: z.literal('loaded_list'),
+    label: z.string().min(1, 'label is required'),
+    article_ids: z.array(z.number()),
+    source_filters: ScopeFiltersSchema.optional(),
+  }),
+  z.object({
+    type: z.literal('list'),
+    mode: z.literal('filtered_list'),
+    label: z.string().min(1, 'label is required'),
+    source_filters: ScopeFiltersSchema.optional(),
+  }),
+])
 
 const ChatBody = z.object({
   message: z.string().min(1, 'message is required'),
   conversation_id: z.string().optional(),
   article_id: z.number().optional(),
   context: z.literal('home').optional(),
+  scope: ChatScopeSchema.optional(),
   timeZone: z.string().optional(),
 })
 
@@ -31,6 +68,7 @@ import {
   replaceChatMessages,
   updateConversation,
   getSetting,
+  getArticleById,
 } from './db.js'
 import { runChatTurn } from './chat/adapter.js'
 import { repairStoredConversation } from './chat/history.js'
@@ -38,6 +76,14 @@ import { TASK_DEFAULTS } from '../shared/models.js'
 import { buildSystemPrompt, appendArticleContext } from './chat/system-prompt.js'
 import { generateConversationTitle } from './chat/title-generator.js'
 import { generateSuggestions } from './chat/suggestions.js'
+import {
+  getChatScopeSummary,
+  normalizeChatScope,
+  parseStoredChatScope,
+  scopesEqual,
+  serializeChatScope,
+  type IncomingChatScope,
+} from './chat/scope.js'
 
 const CONVERSATION_TITLE_MAX_LENGTH = 50
 
@@ -51,19 +97,35 @@ export function registerChatApi(app: FastifyInstance): void {
       if (!body) return
 
       const model = getSetting('chat.model') || TASK_DEFAULTS.chat.model
+      const userId = getRequestUserId(request)
+      const requestedScope = normalizeChatScope({
+        scope: body.scope as IncomingChatScope | undefined,
+        article_id: body.article_id,
+        context: body.context,
+        userId,
+      })
+      let scope: ChatScope = requestedScope
 
       // Get or create conversation
       let conversationId = body.conversation_id
       if (!conversationId) {
         conversationId = randomUUID()
+        const serializedScope = serializeChatScope(scope)
         createConversation({
           id: conversationId,
-          article_id: body.article_id ?? null,
+          article_id: serializedScope.article_id,
+          scope_type: serializedScope.scope_type,
+          scope_payload_json: serializedScope.scope_payload_json,
         })
       } else {
         const existing = getConversationById(conversationId)
         if (!existing) {
           reply.status(404).send({ error: 'Conversation not found' })
+          return
+        }
+        scope = parseStoredChatScope(existing)
+        if (body.scope && !scopesEqual(scope, requestedScope)) {
+          reply.status(409).send({ error: 'Conversation scope mismatch' })
           return
         }
       }
@@ -93,9 +155,9 @@ export function registerChatApi(app: FastifyInstance): void {
       })
 
       // Build system prompt, optionally with article context
-      let systemPrompt = buildSystemPrompt(body.context)
-      if (body.article_id) {
-        systemPrompt = appendArticleContext(systemPrompt, body.article_id)
+      let systemPrompt = buildSystemPrompt(scope)
+      if (scope.type === 'article') {
+        systemPrompt = appendArticleContext(systemPrompt, scope.article_id)
       }
 
       // SSE response
@@ -112,6 +174,7 @@ export function registerChatApi(app: FastifyInstance): void {
           system: systemPrompt,
           model,
           timeZone: body.timeZone,
+          scope,
           onEvent: (event) => {
             if (event.type === 'done') {
               sse.send({ ...event, elapsed_ms: Date.now() - startTime, model })
@@ -193,8 +256,21 @@ export function registerChatApi(app: FastifyInstance): void {
     api.get('/api/chat/conversations', async (request, reply) => {
       const query = ArticleIdQuery.parse(request.query)
       const articleId = query.article_id ?? undefined
+      const userId = getRequestUserId(request)
       const conversations = getConversations({ article_id: articleId })
-      reply.send({ conversations })
+      reply.send({
+        conversations: conversations.map((conversation) => {
+          const scope = parseStoredChatScope(conversation)
+          const article = conversation.article_id != null
+            ? getArticleById(conversation.article_id, userId) as ArticleDetail | undefined
+            : undefined
+          return {
+            ...conversation,
+            scope_type: scope.type,
+            scope_summary: getChatScopeSummary(scope, article),
+          }
+        }),
+      })
     })
 
     // --- GET /api/chat/:id/messages ---

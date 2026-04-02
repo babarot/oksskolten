@@ -5,6 +5,7 @@ import {
   insertArticle,
   getArticleById,
   markArticleSeen,
+  recordArticleRead,
   createCategory,
   updateArticleContent,
 } from '../db.js'
@@ -24,6 +25,7 @@ vi.mock('../fetcher.js', () => ({
 }))
 
 import { TOOLS, toAnthropicTools, executeTool } from './tools.js'
+import { CHAT_SCOPE_OUT_OF_SCOPE_ERROR } from './scope.js'
 
 beforeEach(() => {
   setupTestDb()
@@ -109,6 +111,27 @@ describe('search_articles', () => {
     expect(result).toHaveLength(1)
   })
 
+  it('filters by read', async () => {
+    const feed = seedFeed()
+    const readId = seedArticle(feed.id, { url: 'https://example.com/read' })
+    seedArticle(feed.id, { url: 'https://example.com/unread' })
+    recordArticleRead(readId)
+
+    const result = JSON.parse(await executeTool('search_articles', { read: true }))
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe(readId)
+  })
+
+  it('filters by article_kind', async () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/original', article_kind: 'original', title: 'Original' })
+    seedArticle(feed.id, { url: 'https://example.com/repost', article_kind: 'repost', title: 'Repost' })
+
+    const result = JSON.parse(await executeTool('search_articles', { article_kind: 'repost' }))
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toBe('Repost')
+  })
+
   it('sorts by published_at when sort param is specified', async () => {
     const feed = seedFeed()
     seedArticle(feed.id, { url: 'https://example.com/old', title: 'Old', published_at: '2025-01-01T00:00:00Z' })
@@ -144,6 +167,26 @@ describe('search_articles', () => {
     expect(result[0].summary).toHaveLength(200)
     expect(result[0].summary).toBe('A'.repeat(200))
   })
+
+  it('applies list scope snapshot as a hidden search constraint', async () => {
+    const feed = seedFeed()
+    const inScopeId = seedArticle(feed.id, { url: 'https://example.com/in-scope', title: 'In scope' })
+    seedArticle(feed.id, { url: 'https://example.com/out-of-scope', title: 'Out of scope' })
+
+    const result = JSON.parse(await executeTool('search_articles', {}, {
+      scope: {
+        type: 'list',
+        mode: 'loaded_list',
+        label: 'Current list',
+        count_total: 1,
+        count_scoped: 1,
+        article_ids: [inScopeId],
+      },
+    }))
+
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe(inScopeId)
+  })
 })
 
 describe('get_article', () => {
@@ -164,6 +207,23 @@ describe('get_article', () => {
   it('returns error for non-existent article', async () => {
     const result = JSON.parse(await executeTool('get_article', { article_id: 9999 }))
     expect(result.error).toBe('Article not found')
+  })
+
+  it('rejects out-of-scope article access for list scope', async () => {
+    const feed = seedFeed()
+    const inScopeId = seedArticle(feed.id, { url: 'https://example.com/in' })
+    const outOfScopeId = seedArticle(feed.id, { url: 'https://example.com/out' })
+
+    await expect(executeTool('get_article', { article_id: outOfScopeId }, {
+      scope: {
+        type: 'list',
+        mode: 'loaded_list',
+        label: 'Current list',
+        count_total: 1,
+        count_scoped: 1,
+        article_ids: [inScopeId],
+      },
+    })).rejects.toThrow(CHAT_SCOPE_OUT_OF_SCOPE_ERROR)
   })
 })
 
@@ -221,6 +281,23 @@ describe('mark_as_read', () => {
     const result = JSON.parse(await executeTool('mark_as_read', { article_id: 9999 }))
     expect(result.error).toBe('Article not found')
   })
+
+  it('rejects out-of-scope mutations for list scope', async () => {
+    const feed = seedFeed()
+    const inScopeId = seedArticle(feed.id, { url: 'https://example.com/in' })
+    const outOfScopeId = seedArticle(feed.id, { url: 'https://example.com/out' })
+
+    await expect(executeTool('mark_as_read', { article_id: outOfScopeId }, {
+      scope: {
+        type: 'list',
+        mode: 'loaded_list',
+        label: 'Current list',
+        count_total: 1,
+        count_scoped: 1,
+        article_ids: [inScopeId],
+      },
+    })).rejects.toThrow(CHAT_SCOPE_OUT_OF_SCOPE_ERROR)
+  })
 })
 
 describe('toggle_like', () => {
@@ -246,6 +323,23 @@ describe('toggle_like', () => {
   it('returns error for non-existent article', async () => {
     const result = JSON.parse(await executeTool('toggle_like', { article_id: 9999 }))
     expect(result.error).toBe('Article not found')
+  })
+
+  it('rejects out-of-scope likes for list scope', async () => {
+    const feed = seedFeed()
+    const inScopeId = seedArticle(feed.id, { url: 'https://example.com/in' })
+    const outOfScopeId = seedArticle(feed.id, { url: 'https://example.com/out' })
+
+    await expect(executeTool('toggle_like', { article_id: outOfScopeId }, {
+      scope: {
+        type: 'list',
+        mode: 'loaded_list',
+        label: 'Current list',
+        count_total: 1,
+        count_scoped: 1,
+        article_ids: [inScopeId],
+      },
+    })).rejects.toThrow(CHAT_SCOPE_OUT_OF_SCOPE_ERROR)
   })
 })
 

@@ -20,6 +20,8 @@ import { summarizeArticle, translateArticle } from '../fetcher.js'
 import { getSetting } from '../db/settings.js'
 import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 import { articleUrlToPath } from '../../shared/url.js'
+import type { ChatScope } from '../../shared/types.js'
+import { applyScopeToArticleSearch, assertArticleInScope } from './scope.js'
 
 /** Convert a UTC datetime string from SQLite to a local-time ISO-like string */
 function toLocalTime(utc: string | null, timeZone?: string): string | null {
@@ -38,6 +40,7 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
 
 export interface ToolContext {
   timeZone?: string
+  scope?: ChatScope
 }
 
 export interface ToolDef {
@@ -59,8 +62,10 @@ const searchArticlesTool: ToolDef = {
       feed_id: { type: 'number', description: 'Filter by feed ID' },
       category_id: { type: 'number', description: 'Filter by category ID' },
       unread: { type: 'boolean', description: 'Show unread articles only' },
+      read: { type: 'boolean', description: 'Show read articles only' },
       liked: { type: 'boolean', description: 'Show liked articles only' },
       bookmarked: { type: 'boolean', description: 'Show bookmarked articles only' },
+      article_kind: { type: 'string', enum: ['original', 'repost', 'quote'], description: 'Filter by article kind' },
       since: { type: 'string', description: 'Start datetime (ISO 8601). Compared against published_at' },
       until: { type: 'string', description: 'End datetime (ISO 8601). Compared against published_at' },
       limit: { type: 'number', description: 'Maximum number of results (default: 20, max: 100)' },
@@ -72,16 +77,21 @@ const searchArticlesTool: ToolDef = {
     const feed_id = input.feed_id as number | undefined
     const category_id = input.category_id as number | undefined
     const unread = input.unread as boolean | undefined
+    const read = input.read as boolean | undefined
     const liked = input.liked as boolean | undefined
     const bookmarked = input.bookmarked as boolean | undefined
+    const article_kind = input.article_kind as 'original' | 'repost' | 'quote' | undefined
     const since = input.since as string | undefined
     const until = input.until as string | undefined
     const limit = clampLimit(input.limit as number | undefined, 20, 100)
     const sort = input.sort as 'published_at' | 'score' | undefined
+    const scopeArticleIds = input.__scope_article_ids as number[] | undefined
 
     let results: ArticleListItem[]
 
-    if (query && isSearchReady()) {
+    const useMeili = !!query && isSearchReady() && !scopeArticleIds && read === undefined && article_kind === undefined
+
+    if (useMeili) {
       // Meilisearch path
       const filter = buildMeiliFilter({ feed_id, category_id, since, until, unread, liked, bookmarked })
       const meiliSort = sort ? [`${sort}:desc`] : undefined
@@ -91,7 +101,21 @@ const searchArticlesTool: ToolDef = {
       results = getArticlesByIds(ids)
     } else {
       // No query or search not ready: SQLite fallback
-      results = searchArticles({ query, feed_id, category_id, unread, liked, bookmarked, since, until, limit, sort })
+      results = searchArticles({
+        query,
+        feed_id,
+        category_id,
+        unread,
+        read,
+        liked,
+        bookmarked,
+        article_kind,
+        article_ids: scopeArticleIds,
+        since,
+        until,
+        limit,
+        sort,
+      })
     }
 
     return JSON.stringify(results.map((a: ArticleListItem) => ({
@@ -567,9 +591,23 @@ export function toGeminiTools() {
 // --- Dispatch ---
 
 const toolMap = new Map(TOOLS.map(t => [t.name, t]))
+const ARTICLE_SCOPED_TOOL_NAMES = new Set([
+  'get_article',
+  'mark_as_read',
+  'toggle_like',
+  'toggle_bookmark',
+  'summarize_article',
+  'translate_article',
+])
 
 export async function executeTool(name: string, input: Record<string, unknown>, context?: ToolContext): Promise<string> {
   const tool = toolMap.get(name)
   if (!tool) throw new Error(`Unknown tool: ${name}`)
-  return tool.execute(input, context)
+  if (ARTICLE_SCOPED_TOOL_NAMES.has(name)) {
+    assertArticleInScope(input.article_id as number, context?.scope)
+  }
+  const effectiveInput = name === 'search_articles'
+    ? applyScopeToArticleSearch(input, context?.scope)
+    : input
+  return tool.execute(effectiveInput, context)
 }

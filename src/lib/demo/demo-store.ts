@@ -3,7 +3,7 @@ import seedArticles from './seed/articles.json'
 import seedConversationsEn from './seed/en/conversations.json'
 import seedConversationsJa from './seed/ja/conversations.json'
 import { getLocale, dt } from './i18n'
-import type { FeedWithCounts, ArticleListItem, ArticleDetail, Category } from '../../../shared/types'
+import type { FeedWithCounts, ArticleListItem, ArticleDetail, Category, ChatScope, ScopeSummary } from '../../../shared/types'
 import { resolveFeedViewType, type ArticleKind, type FeedViewType } from '../../../shared/article-kind'
 
 type Locale = 'ja' | 'en'
@@ -125,7 +125,31 @@ interface SeedConversation {
   created_at: string
   updated_at: string
   message_count: number
+  scope_type?: 'global' | 'article' | 'list' | null
+  scope_summary?: ScopeSummary | null
   messages: SeedConversationMessage[]
+}
+
+function inferConversationScopeSummary(conv: SeedConversation): ScopeSummary | null {
+  if (conv.scope_type === 'list') {
+    return conv.scope_summary ?? {
+      type: 'list',
+      label: 'Current list',
+      detail: null,
+    }
+  }
+  if ((conv.scope_type ?? (conv.article_id != null ? 'article' : 'global')) === 'article') {
+    return {
+      type: 'article',
+      label: 'Current article',
+      detail: conv.article_title ?? null,
+    }
+  }
+  return {
+    type: 'global',
+    label: 'Global archive',
+    detail: null,
+  }
 }
 
 function articleSummary(a: SeedArticle): string | null {
@@ -542,7 +566,11 @@ export const demoStore = {
       result = result.filter(c => c.article_id === articleId)
     }
     return {
-      conversations: result.map(({ messages: _m, ...rest }) => rest)
+      conversations: result.map(({ messages: _m, scope_type, scope_summary, ...rest }) => ({
+        ...rest,
+        scope_type: scope_type ?? (rest.article_id != null ? 'article' : 'global'),
+        scope_summary: scope_summary ?? inferConversationScopeSummary({ ...rest, messages: [], scope_type, scope_summary }),
+      }))
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
     }
   },
@@ -554,14 +582,28 @@ export const demoStore = {
     return { messages: conv.messages }
   },
 
-  createConversation(id: string, firstMessage: string): void {
+  createConversation(id: string, firstMessage: string, scope?: ChatScope): void {
     ensureConversationLocale()
     const now = new Date().toISOString()
     const content = JSON.stringify([{ type: 'text', text: firstMessage }])
+    const inferredScopeType = scope?.type ?? 'global'
+    const scopeSummary: ScopeSummary | null = scope?.type === 'article'
+      ? { type: 'article', label: 'Current article', detail: null }
+      : scope?.type === 'list'
+        ? {
+            type: 'list',
+            label: scope.label,
+            detail: scope.count_total > scope.count_scoped
+              ? `${scope.count_scoped} / ${scope.count_total}`
+              : `${scope.count_scoped}`,
+            count_total: scope.count_total,
+            count_scoped: scope.count_scoped,
+          }
+        : { type: 'global', label: 'Global archive', detail: null }
     conversations.push({
       id,
       title: firstMessage.slice(0, 50),
-      article_id: null,
+      article_id: scope?.type === 'article' ? scope.article_id : null,
       article_title: null,
       article_url: null,
       article_og_image: null,
@@ -570,6 +612,8 @@ export const demoStore = {
       created_at: now,
       updated_at: now,
       message_count: 1,
+      scope_type: inferredScopeType,
+      scope_summary: scopeSummary,
       messages: [{ role: 'user', content }],
     })
   },

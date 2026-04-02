@@ -365,7 +365,7 @@ export async function demoStreamPostChat(
   body: unknown,
   onEvent: (event: { type: string; text?: string; conversation_id?: string; usage?: { input_tokens: number; output_tokens: number }; elapsed_ms?: number; model?: string }) => void,
 ): Promise<void> {
-  const { conversation_id, message, suggestion_key } = (body ?? {}) as { conversation_id?: string; message?: string; suggestion_key?: string }
+  const { conversation_id, message, suggestion_key, scope } = (body ?? {}) as { conversation_id?: string; message?: string; suggestion_key?: string; scope?: import('../../../shared/types').ChatScope }
   const isNew = !conversation_id
   const resolvedId = conversation_id ?? crypto.randomUUID()
   onEvent({ type: 'conversation_id', conversation_id: resolvedId })
@@ -373,7 +373,7 @@ export async function demoStreamPostChat(
   // Persist user message to in-memory store
   if (message) {
     if (isNew) {
-      demoStore.createConversation(resolvedId, message)
+      demoStore.createConversation(resolvedId, message, scope)
     } else {
       demoStore.appendMessage(resolvedId, 'user', message)
     }

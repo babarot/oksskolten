@@ -100,6 +100,46 @@ export interface ArticleDetail extends ArticleListItem {
   imageArchivingEnabled: boolean
 }
 
+export interface ListChatScopeFilters {
+  feed_id?: number
+  category_id?: number
+  unread?: boolean
+  bookmarked?: boolean
+  liked?: boolean
+  read?: boolean
+  article_kind?: ArticleKind
+  no_floor?: boolean
+}
+
+export interface GlobalChatScope {
+  type: 'global'
+}
+
+export interface ArticleChatScope {
+  type: 'article'
+  article_id: number
+}
+
+export interface ListChatScope {
+  type: 'list'
+  mode: 'loaded_list' | 'filtered_list'
+  label: string
+  count_total: number
+  count_scoped: number
+  article_ids: number[]
+  source_filters?: ListChatScopeFilters
+}
+
+export type ChatScope = GlobalChatScope | ArticleChatScope | ListChatScope
+
+export interface ScopeSummary {
+  type: ChatScope['type']
+  label: string
+  detail?: string | null
+  count_total?: number
+  count_scoped?: number
+}
+
 export interface NotificationChannel {
   id: number
   user_id: number | null

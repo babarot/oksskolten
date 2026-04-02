@@ -17,6 +17,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { TOOLS } from './tools.js'
+import type { ChatScope } from '../../shared/types.js'
 
 log.error('boot', {
   pid: process.pid,
@@ -64,12 +65,21 @@ function jsonSchemaToZod(
 }
 
 const server = new McpServer({ name: 'oksskolten', version: '1.0.0' })
+const scope = (() => {
+  const raw = process.env.CHAT_SCOPE_JSON
+  if (!raw) return undefined
+  try {
+    return JSON.parse(raw) as ChatScope
+  } catch {
+    return undefined
+  }
+})()
 
 for (const tool of TOOLS) {
   const shape = jsonSchemaToZod(tool.inputSchema)
   server.tool(tool.name, tool.description, shape, async (input) => {
     log.error('tool start', { name: tool.name, input })
-    const result = await tool.execute(input as Record<string, unknown>)
+    const result = await tool.execute(input as Record<string, unknown>, { scope })
 
     // Log tool execution for the Claude Code adapter to reconstruct
     if (process.env.TOOL_LOG_PATH) {

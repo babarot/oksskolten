@@ -7,6 +7,7 @@ import { ChatPanel } from '../components/chat/chat-panel'
 import { useI18n, isMessageKey } from '../lib/i18n'
 import type { TranslateFn } from '../lib/i18n'
 import { fetcher } from '../lib/fetcher'
+import { buildGlobalScope, summarizeScope } from '../lib/chat-scope'
 
 const RANDOM_GREETING_COUNT = 5
 
@@ -28,7 +29,8 @@ function getGreeting(t: TranslateFn, name: string): string {
 export function HomePage() {
   const { t } = useI18n()
   const location = useLocation()
-  const chatState = useChat()
+  const globalScope = buildGlobalScope()
+  const chatState = useChat(globalScope)
   const { messages, streaming, sendMessage, reset } = chatState
   const { data: profile } = useSWR<{ account_name: string }>('/api/settings/profile', fetcher)
 
@@ -168,7 +170,13 @@ export function HomePage() {
   // Conversation view — delegate to ChatPanel
   return (
     <div className="h-[calc(100dvh-var(--header-height))]">
-      <ChatPanel variant="full" chatState={chatState} onConversationCreated={handleConversationCreated} />
+      <ChatPanel
+        variant="full"
+        chatState={chatState}
+        scope={globalScope}
+        scopeSummary={summarizeScope(globalScope, t)}
+        onConversationCreated={handleConversationCreated}
+      />
     </div>
   )
 }

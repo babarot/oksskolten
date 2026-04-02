@@ -51,7 +51,7 @@ function buildPrompt(messages: Message[]): string {
  * Does NOT use --session-id/--resume — DB is the single source of truth.
  */
 export async function runClaudeCodeTurn(params: ChatTurnParams): Promise<RunChatTurnResult> {
-  const { messages, system, model, onEvent } = params
+  const { messages, system, model, onEvent, scope } = params
 
   // Create tool log temp file for MCP server to write to
   const toolLogPath = path.join(os.tmpdir(), `oksskolten-tool-log-${Date.now()}.jsonl`)
@@ -66,6 +66,7 @@ export async function runClaudeCodeTurn(params: ChatTurnParams): Promise<RunChat
         args: [tsxCliPath, mcpServerPath],
         env: {
           TOOL_LOG_PATH: toolLogPath,
+          ...(scope ? { CHAT_SCOPE_JSON: JSON.stringify(scope) } : {}),
         },
       },
     },

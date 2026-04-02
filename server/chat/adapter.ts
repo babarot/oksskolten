@@ -1,4 +1,5 @@
 import type { Message } from './types.js'
+import type { ChatScope } from '../../shared/types.js'
 import { runAnthropicTurn } from './adapter-anthropic.js'
 
 export type ChatSSEEvent =
@@ -20,6 +21,7 @@ export interface ChatTurnParams {
   system: string
   model: string
   timeZone?: string
+  scope?: ChatScope
   onEvent: (event: ChatSSEEvent) => void
 }
 

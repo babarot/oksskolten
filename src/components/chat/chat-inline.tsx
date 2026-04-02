@@ -5,6 +5,8 @@ import { ChatPanel } from './chat-panel'
 import { ActionChip } from '../ui/action-chip'
 import { fetcher } from '../../lib/fetcher'
 import { useI18n } from '../../lib/i18n'
+import { buildArticleScope } from '../../lib/chat-scope'
+import type { ScopeSummary } from '../../../shared/types'
 
 interface ChatInlineProps {
   articleId: number
@@ -39,10 +41,10 @@ export function ChatInlineTrigger({ active, onToggle }: { active: boolean; onTog
   )
 }
 
-export function ChatInlinePanel({ articleId, onClose }: { articleId: number; onClose: () => void }) {
+export function ChatInlinePanel({ articleId, onClose, scopeSummary }: { articleId: number; onClose: () => void; scopeSummary?: ScopeSummary | null }) {
   return (
     <div className="mt-2 mb-6">
-      <ChatPanel variant="inline" articleId={articleId} onClose={onClose} />
+      <ChatPanel variant="inline" scope={buildArticleScope(articleId)} scopeSummary={scopeSummary} onClose={onClose} />
     </div>
   )
 }
@@ -56,7 +58,7 @@ export function ChatInline({ articleId }: ChatInlineProps) {
       <ChatInlineTrigger active={chat.open} onToggle={chat.toggle} />
       {chat.open && (
         <div className="basis-full mt-2">
-          <ChatPanel variant="inline" articleId={articleId} onClose={chat.close} />
+          <ChatPanel variant="inline" scope={buildArticleScope(articleId)} onClose={chat.close} />
         </div>
       )}
     </>
