@@ -9,6 +9,7 @@ docs/temp_*
 *.db-shm
 *.zip
 coverage/
+GEMINI.md
 # Claude local settings & generated files
 .claude/settings.local.json
 .claude/worktrees/

@@ -43,6 +43,15 @@ function jsonSchemaToZod(
       case 'boolean':
         zodType = z.boolean()
         break
+      case 'array':
+        if (prop.items?.type === 'number') {
+          zodType = z.array(z.number())
+        } else if (prop.items?.type === 'string') {
+          zodType = z.array(z.string())
+        } else {
+          zodType = z.array(z.any())
+        }
+        break
       case 'string':
       default:
         zodType = z.string()

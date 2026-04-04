@@ -207,8 +207,8 @@ describe('runChatTurn', () => {
     // Should have error event about max rounds
     expect(events.some(e => e.type === 'error')).toBe(true)
     expect(events.some(e => e.type === 'done')).toBe(true)
-    // Should not exceed 10 API calls
-    expect(anthropic.messages.stream).toHaveBeenCalledTimes(10)
+    // Should not exceed 20 API calls
+    expect(anthropic.messages.stream).toHaveBeenCalledTimes(20)
   })
 
   it('accumulates usage across rounds', async () => {

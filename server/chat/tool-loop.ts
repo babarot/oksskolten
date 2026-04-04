@@ -2,7 +2,7 @@ import type { Message, ToolUseBlock, ToolResultBlock, ContentBlock } from './typ
 import type { ChatTurnParams, RunChatTurnResult, ChatSSEEvent } from './adapter.js'
 import { executeTool } from './tools.js'
 
-export const MAX_TOOL_ROUNDS = 10
+export const MAX_TOOL_ROUNDS = 20
 export const CHAT_MAX_TOKENS = 4096
 
 export interface ProviderCallResult {

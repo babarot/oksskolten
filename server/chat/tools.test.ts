@@ -223,6 +223,27 @@ describe('mark_as_read', () => {
   })
 })
 
+describe('mark_articles_as_read', () => {
+  it('marks multiple articles as read', async () => {
+    const feed = seedFeed()
+    const id1 = seedArticle(feed.id, { url: 'https://example.com/m1' })
+    const id2 = seedArticle(feed.id, { url: 'https://example.com/m2' })
+
+    const result = JSON.parse(await executeTool('mark_articles_as_read', { article_ids: [id1, id2] }))
+    expect(result.success).toBe(true)
+    expect(result.count).toBe(2)
+
+    expect(getArticleById(id1)!.seen_at).not.toBeNull()
+    expect(getArticleById(id2)!.seen_at).not.toBeNull()
+  })
+
+  it('handles empty array', async () => {
+    const result = JSON.parse(await executeTool('mark_articles_as_read', { article_ids: [] }))
+    expect(result.success).toBe(true)
+    expect(result.count).toBe(0)
+  })
+})
+
 describe('toggle_like', () => {
   it('likes an article', async () => {
     const feed = seedFeed()
@@ -303,6 +324,25 @@ describe('summarize_article', () => {
 
     const result = JSON.parse(await executeTool('summarize_article', { article_id: id }))
     expect(result.error).toBe('No full text available')
+  })
+})
+
+describe('summarize_articles', () => {
+  it('returns cached and new summaries', async () => {
+    const feed = seedFeed()
+    const id1 = seedArticle(feed.id, { url: 'https://example.com/s1', full_text: 'text 1', summary: 'Cached 1' })
+    const id2 = seedArticle(feed.id, { url: 'https://example.com/s2', full_text: 'text 2' })
+
+    const result = JSON.parse(await executeTool('summarize_articles', { article_ids: [id1, id2] }))
+    expect(result).toHaveLength(2)
+    expect(result.find((r: any) => r.id === id1).summary).toBe('Cached 1')
+    expect(result.find((r: any) => r.id === id1).cached).toBe(true)
+    expect(result.find((r: any) => r.id === id2).summary).toBe('Mocked summary')
+  })
+
+  it('handles empty array', async () => {
+    const result = JSON.parse(await executeTool('summarize_articles', { article_ids: [] }))
+    expect(result).toEqual([])
   })
 })
 

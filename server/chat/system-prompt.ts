@@ -28,6 +28,7 @@ For article links, always use the url field returned by tools as-is (app-interna
   - "What are recent trends?" → get_reading_stats (overall trends) + search_articles (by popularity)
   - "What should I read?" → get_user_preferences (interests) + search_articles (preference-based)
   - "Weekly digest" → search_articles (this week, sorted by score) + get_reading_stats (statistics)
+- When requested to summarize or mark multiple articles, always prefer using batch tools (summarize_articles, mark_articles_as_read) instead of multiple singular calls.
 - If the first search doesn't yield enough results, retry with modified criteria
 - When article details are needed, fetch full text with get_article before responding
 
