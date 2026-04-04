@@ -33,6 +33,11 @@ export async function runChatTurn(provider: string, params: ChatTurnParams): Pro
     const { getOllamaClient } = await import('../providers/llm/ollama.js')
     return runOpenAITurn(params, getOllamaClient())
   }
+  if (provider === 'vllm') {
+    const { runOpenAITurn } = await import('./adapter-openai.js')
+    const { getVllmClient } = await import('../providers/llm/vllm.js')
+    return runOpenAITurn(params, getVllmClient())
+  }
   if (provider === 'openai') {
     const { runOpenAITurn } = await import('./adapter-openai.js')
     return runOpenAITurn(params)

@@ -21,6 +21,7 @@ export function ProviderConfigSection({ t, settings }: { t: TFunc; settings: Set
           ))}
           <ClaudeCodeCard t={t} />
           <OllamaCard t={t} />
+          <VllmCard t={t} />
         </div>
       </div>
       <div>
@@ -430,6 +431,169 @@ function OllamaCard({ t }: { t: TFunc }) {
             {testResult.ok
               ? `${t('ollama.connected')} (v${testResult.version}, ${testResult.model_count} models)`
               : `${t('ollama.connectionFailed')}: ${testResult.error}`}
+          </span>
+        )}
+      </div>
+
+      {message && (
+        <p className={`text-xs ${message.type === 'error' ? 'text-error' : 'text-accent'}`}>
+          {message.text}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function VllmCard({ t }: { t: TFunc }) {
+  const { data: prefs, mutate: mutatePrefs } = useSWR<Record<string, string | null>>(
+    '/api/settings/preferences',
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+  const { data: keyStatus, mutate: mutateKeyStatus } = useSWR<{ configured: boolean }>(
+    '/api/settings/api-keys/vllm',
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+
+  const savedBaseUrl = prefs?.['vllm.base_url'] || ''
+  const isConfigured = keyStatus?.configured
+
+  const [baseUrlInput, setBaseUrlInput] = useState('')
+  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; model_count?: number; error?: string } | null>(null)
+
+  // Sync inputs with saved values on first load
+  const [initialized, setInitialized] = useState(false)
+  useEffect(() => {
+    if (!prefs || initialized) return
+    setBaseUrlInput(prefs['vllm.base_url'] || '')
+    setInitialized(true)
+  }, [prefs, initialized])
+
+  function showMessage(text: string, type: 'success' | 'error') {
+    setMessage({ text, type })
+    setTimeout(() => setMessage(null), 3000)
+  }
+
+  const handleSave = useCallback(async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const promises: Promise<any>[] = [
+        apiPatch('/api/settings/preferences', { 'vllm.base_url': baseUrlInput || '' }),
+      ]
+      if (apiKeyInput) {
+        promises.push(apiPost('/api/settings/api-keys/vllm', { apiKey: apiKeyInput }))
+      }
+      await Promise.all(promises)
+      void mutatePrefs()
+      void mutateKeyStatus()
+      setApiKeyInput('')
+      showMessage(t('vllm.baseUrlSaved'), 'success')
+    } catch (err: unknown) {
+      showMessage(err instanceof Error ? err.message : 'Save failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }, [saving, baseUrlInput, apiKeyInput, mutatePrefs, mutateKeyStatus, t])
+
+  const handleDeleteKey = useCallback(async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await apiPost('/api/settings/api-keys/vllm', { apiKey: '' })
+      void mutateKeyStatus()
+      showMessage(t('vllm.apiKeyDeleted'), 'success')
+    } catch (err: unknown) {
+      showMessage(err instanceof Error ? err.message : 'Delete failed', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }, [saving, mutateKeyStatus, t])
+
+  const handleTest = useCallback(async () => {
+    if (testing) return
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetcher('/api/settings/vllm/status') as { ok: boolean; model_count?: number; error?: string }
+      setTestResult(res)
+    } catch {
+      setTestResult({ ok: false, error: 'Request failed' })
+    } finally {
+      setTesting(false)
+    }
+  }, [testing])
+
+  const hasChanges = baseUrlInput !== savedBaseUrl || !!apiKeyInput
+
+  return (
+    <div className="p-3 rounded-lg bg-bg-card border border-border min-h-[3rem] space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${testResult?.ok ? 'bg-success' : savedBaseUrl ? 'bg-warning' : 'bg-muted'}`} />
+          <span className="text-sm font-medium text-text select-none">{t('provider.vllm')}</span>
+        </div>
+        {isConfigured && (
+          <button
+            type="button"
+            onClick={handleDeleteKey}
+            disabled={saving}
+            className="px-3 py-1 text-xs rounded-lg border border-border text-muted hover:text-text hover:bg-hover transition-colors disabled:opacity-50 select-none"
+          >
+            {t('chat.apiKeyDelete')}
+          </button>
+        )}
+      </div>
+
+      <FormField label={t('vllm.baseUrl')} hint={t('vllm.baseUrlDesc')} compact>
+        <Input
+          type="text"
+          value={baseUrlInput}
+          onChange={e => setBaseUrlInput(e.target.value)}
+          placeholder={t('vllm.baseUrlPlaceholder')}
+          className="py-1.5"
+        />
+      </FormField>
+
+      <FormField label={t('chat.apiKey')} compact>
+        <Input
+          type="password"
+          value={apiKeyInput}
+          onChange={e => setApiKeyInput(e.target.value)}
+          placeholder={isConfigured ? '••••••••' : '...'}
+          className="py-1.5"
+        />
+      </FormField>
+
+      <div className="flex items-center gap-2">
+        {hasChanges && (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-accent-text hover:opacity-90 transition-opacity disabled:opacity-50 select-none shrink-0"
+          >
+            {saving ? '...' : t('settings.save')}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleTest}
+          disabled={testing}
+          className="px-3 py-1.5 text-xs rounded-lg border border-border text-muted hover:text-text hover:bg-hover transition-colors disabled:opacity-50 select-none"
+        >
+          {testing ? t('vllm.testing') : t('vllm.testConnection')}
+        </button>
+        {testResult && (
+          <span className={`text-xs ${testResult.ok ? 'text-accent' : 'text-error'}`}>
+            {testResult.ok
+              ? `${t('vllm.connected')} (${testResult.model_count} models)`
+              : `${t('vllm.connectionFailed')}: ${testResult.error}`}
           </span>
         )}
       </div>

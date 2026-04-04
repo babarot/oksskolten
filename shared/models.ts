@@ -67,6 +67,7 @@ export const DEFAULT_MODELS: Record<string, string> = {
   openai: 'gpt-4.1-mini',
   'claude-code': 'claude-haiku-4-5-20251001',
   ollama: '',
+  vllm: '',
   'google-translate': '',
   deepl: '',
 }
@@ -84,14 +85,15 @@ export const LLM_API_PROVIDERS = ['anthropic', 'gemini', 'openai'] as const
 export const TRANSLATE_SERVICE_PROVIDERS = ['google-translate', 'deepl'] as const
 
 /** All LLM providers selectable for tasks (includes claude-code which uses auth, not API key) */
-export const LLM_TASK_PROVIDERS = [...LLM_API_PROVIDERS, 'claude-code', 'ollama'] as const
+export const LLM_TASK_PROVIDERS = [...LLM_API_PROVIDERS, 'claude-code', 'ollama', 'vllm'] as const
 
-export const PROVIDER_LABELS: Record<string, 'provider.anthropic' | 'provider.gemini' | 'provider.openai' | 'provider.claudeCode' | 'provider.ollama' | 'provider.googleTranslate' | 'provider.deepl'> = {
+export const PROVIDER_LABELS: Record<string, 'provider.anthropic' | 'provider.gemini' | 'provider.openai' | 'provider.claudeCode' | 'provider.ollama' | 'provider.vllm' | 'provider.googleTranslate' | 'provider.deepl'> = {
   anthropic: 'provider.anthropic',
   gemini: 'provider.gemini',
   openai: 'provider.openai',
   'claude-code': 'provider.claudeCode',
   ollama: 'provider.ollama',
+  vllm: 'provider.vllm',
   'google-translate': 'provider.googleTranslate',
   deepl: 'provider.deepl',
 }
@@ -103,6 +105,7 @@ export const SUB_AGENT_MODELS: Record<string, string> = {
   openai: 'gpt-5-nano',
   'claude-code': 'claude-haiku-4-5-20251001',
   ollama: '',
+  vllm: '',
 }
 
 /** Get flat array of model value strings for a given provider */
