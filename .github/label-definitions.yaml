@@ -25,11 +25,11 @@
 - name: kind/cleanup
   description: Categorizes issue or PR as related to cleaning up code, issues, etc.
   color: 425df5
-- name: kind/improvement
-  description: An improvement to existing functionality; not a new feature or bug fix
-  color: 425df5
 - name: kind/breaking-change
   description: Denotes a PR that introduces potentially breaking changes that require user action.
+  color: 425df5
+- name: kind/improvement
+  description: An improvement to existing functionality; not a new feature or bug fix
   color: 425df5
 
 # release/ - which version to be released
