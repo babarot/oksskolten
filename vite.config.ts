@@ -154,7 +154,7 @@ export default defineConfig(({ mode }) => {
         ? { usePolling: true, interval: 300 }
         : undefined,
       proxy: {
-        '/api': env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3000',
+        '/api': env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:13000',
       },
     },
   }
