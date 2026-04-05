@@ -180,7 +180,10 @@ const dict = {
   'modal.step.found': { ja: '検出', en: 'Found' },
   'modal.step.notFound': { ja: 'この段階では未検出', en: 'Not detected at this step' },
   'modal.step.skipped': { ja: 'スキップ', en: 'Skipped' },
-  'modal.skipRssDiscovery': { ja: 'RSS自動検出をスキップ（LLMセレクター推論を使用）', en: 'Skip RSS auto-discovery (use LLM selector inference)' },
+  'modal.choiceTitle': { ja: 'サイト全体のRSSフィードが見つかりました', en: 'Found a site-wide RSS feed' },
+  'modal.choiceWholeSite': { ja: 'サイト全体を購読', en: 'Subscribe to the whole site' },
+  'modal.choiceThisPage': { ja: 'このページだけを購読', en: 'Subscribe to this page only' },
+  'modal.errorPageExtract': { ja: 'このページからコンテンツを抽出できませんでした', en: 'Could not extract content from this page' },
 
   // Settings
   'feeds.dateFormat': { ja: '日付表示', en: 'Date' },
