@@ -56,6 +56,13 @@ export const articleFonts: ArticleFont[] = [
     category: 'serif',
   },
   {
+    value: 'system-serif',
+    label: 'System Serif',
+    family: 'serif',
+    googleFontsUrl: null,
+    category: 'serif',
+  },
+  {
     value: 'lora',
     label: 'Lora',
     family: '"Lora", serif',
