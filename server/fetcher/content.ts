@@ -7,10 +7,11 @@ import type { ParseHtmlInput, ParseHtmlResult } from './contentWorker.js'
 
 // Worker pool for CPU-intensive DOM parsing (jsdom + Readability + Turndown).
 // Runs on separate threads so the main event loop stays responsive for API requests.
-// Inherit the parent's execArgv so the tsx TypeScript loader is available in workers.
+// In development, inherit the parent's execArgv so the tsx loader is available in workers.
+const isDev = process.env.NODE_ENV === 'development'
 const pool = new Piscina({
-  filename: new URL('./contentWorker.ts', import.meta.url).href,
-  execArgv: process.execArgv,
+  filename: new URL(`./contentWorker.${isDev ? 'ts' : 'js'}`, import.meta.url).href,
+  execArgv: isDev ? process.execArgv : [],
   maxThreads: Number(process.env.PARSE_MAX_THREADS) || 2,
 })
 

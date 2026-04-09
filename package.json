@@ -13,6 +13,7 @@
     "dev:server:noauth": "NODE_ENV=development AUTH_DISABLED=1 tsx watch --env-file-if-exists=.env server/index.ts",
     "generate-pwa-assets": "pwa-assets-generator",
     "build": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
     "start": "tsx --env-file-if-exists=.env server/index.ts",
     "lint": "eslint src/ server/ shared/",
     "typecheck": "tsc --noEmit",
