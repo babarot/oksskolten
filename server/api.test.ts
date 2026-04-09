@@ -274,22 +274,55 @@ describe('GET /api/articles/by-url', () => {
     })
     expect(res.statusCode).toBe(404)
   })
+
+  it('handles protocol fallback (https -> http)', async () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'http://example.com/http-only' })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/articles/by-url?url=https://example.com/http-only',
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().url).toBe('http://example.com/http-only')
+  })
+
+  it('handles protocol fallback (http -> https)', async () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/https-only' })
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/articles/by-url?url=http://example.com/https-only',
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().url).toBe('https://example.com/https-only')
+  })
 })
 
 describe('POST /api/articles/check-urls', () => {
-  it('returns existing URLs', async () => {
+  it('returns existing URLs including protocol-agnostic matches', async () => {
     const feed = seedFeed()
-    seedArticle(feed.id, { url: 'https://example.com/exists' })
+    seedArticle(feed.id, { url: 'http://example.com/check-1' })
+    seedArticle(feed.id, { url: 'https://example.com/check-2' })
 
     const res = await app.inject({
       method: 'POST',
       url: '/api/articles/check-urls',
       headers: json,
-      payload: { urls: ['https://example.com/exists', 'https://example.com/not'] },
+      payload: {
+        urls: [
+          'https://example.com/check-1', // input https, DB has http
+          'http://example.com/check-2',  // input http, DB has https
+          'https://example.com/check-3', // not in DB
+        ],
+      },
     })
     expect(res.statusCode).toBe(200)
-    expect(res.json().existing).toContain('https://example.com/exists')
-    expect(res.json().existing).not.toContain('https://example.com/not')
+    const { existing } = res.json()
+    expect(existing).toContain('https://example.com/check-1')
+    expect(existing).toContain('http://example.com/check-2')
+    expect(existing).not.toContain('https://example.com/check-3')
   })
 
   it('returns 400 for empty array', async () => {

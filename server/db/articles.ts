@@ -206,7 +206,9 @@ export function getArticles(opts: {
 }
 
 export function getArticleByUrl(url: string): ArticleDetail | undefined {
-  return getDb().prepare(`
+  const db = getDb()
+  const normalized = normalizeUrl(url)
+  const stmt = db.prepare(`
     SELECT a.id, a.feed_id, f.name AS feed_name, f.type AS feed_type,
            a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image,
            a.full_text, a.full_text_translated, a.translated_lang, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
@@ -215,7 +217,25 @@ export function getArticleByUrl(url: string): ArticleDetail | undefined {
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     WHERE a.url = ?
-  `).get(normalizeUrl(url)) as ArticleDetail | undefined
+  `)
+
+  // 1. Exact match
+  const article = stmt.get(normalized) as ArticleDetail | undefined
+  if (article) return article
+
+  // 2. Protocol fallback (https -> http or vice versa)
+  let fallbackUrl: string | null = null
+  if (normalized.startsWith('https://')) {
+    fallbackUrl = 'http://' + normalized.slice(8)
+  } else if (normalized.startsWith('http://')) {
+    fallbackUrl = 'https://' + normalized.slice(7)
+  }
+
+  if (fallbackUrl) {
+    return stmt.get(fallbackUrl) as ArticleDetail | undefined
+  }
+
+  return undefined
 }
 
 export function getArticleById(id: number): ArticleDetail | undefined {
@@ -407,11 +427,41 @@ export function updateArticleContent(
 export function getExistingArticleUrls(urls: string[]): Set<string> {
   if (urls.length === 0) return new Set()
   const normalized = urls.map(normalizeUrl)
-  const placeholders = normalized.map(() => '?').join(',')
+
+  // For each URL, we want to check both http and https versions to be protocol-agnostic
+  const expanded = new Set<string>()
+  for (const u of normalized) {
+    expanded.add(u)
+    if (u.startsWith('https://')) {
+      expanded.add('http://' + u.slice(8))
+    } else if (u.startsWith('http://')) {
+      expanded.add('https://' + u.slice(7))
+    }
+  }
+
+  const expandedList = [...expanded]
+  const placeholders = expandedList.map(() => '?').join(',')
   const rows = getDb().prepare(
     `SELECT url FROM articles WHERE url IN (${placeholders})`,
-  ).all(...normalized) as { url: string }[]
-  return new Set(rows.map(r => r.url))
+  ).all(...expandedList) as { url: string }[]
+
+  // Return the original input URLs that have a match (in either protocol) in the DB
+  const dbUrls = new Set(rows.map(r => r.url))
+  const existing = new Set<string>()
+  for (const u of normalized) {
+    if (dbUrls.has(u)) {
+      existing.add(u)
+      continue
+    }
+    // Check fallback
+    if (u.startsWith('https://')) {
+      if (dbUrls.has('http://' + u.slice(8))) existing.add(u)
+    } else if (u.startsWith('http://')) {
+      if (dbUrls.has('https://' + u.slice(7))) existing.add(u)
+    }
+  }
+
+  return existing
 }
 
 // Backoff deadline: datetime when the article becomes eligible for retry again.
