@@ -1,4 +1,4 @@
-# Google Reader API
+# Using the Google Reader API
 
 Oksskolten exposes a Google Reader–compatible endpoint at `/reader/api/0/`. This lets native feed reader apps like **NetNewsWire**, **Reeder**, and others sync feeds, articles, read/unread state, and starred items directly with your Oksskolten instance.
 
