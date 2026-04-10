@@ -39,7 +39,7 @@ In your feed reader, choose **FreshRSS** or **Google Reader** as the account typ
 
 The Google Reader API uses a token-based auth flow:
 
-1. Client POSTs credentials to `/reader/accounts/ClientLogin`
+1. Client POSTs credentials to `/accounts/ClientLogin`
 2. Server returns a JWT token in the response body as `Auth=<token>`
 3. Subsequent requests include `Authorization: GoogleLogin auth=<token>`
 

@@ -22,7 +22,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { getDb } from '../db/connection.js'
 import { getFeeds } from '../db/feeds.js'
 import { getCategories, markAllSeenByCategory } from '../db/categories.js'
-import { getArticles, getArticlesByIds, markArticleSeen, markArticleBookmarked, markArticleLiked, markAllSeenByFeed } from '../db/articles.js'
+import { getArticles, markArticleSeen, markArticleLiked, markAllSeenByFeed } from '../db/articles.js'
 
 // --- ID helpers ---
 
@@ -38,10 +38,27 @@ function itemTagId(id: number): string {
 
 /** Decode a GReader item id back to an integer */
 function decodeItemId(raw: string): number | null {
-  // Accepts both "tag:google.com,2005:reader/item/<hex>" and plain hex
-  const hex = raw.includes('/item/') ? raw.split('/item/')[1] : raw
-  const n = parseInt(hex, 16)
-  return isNaN(n) ? null : n
+  // Accept the canonical tag URI with a hex suffix
+  if (raw.includes('/item/')) {
+    const hex = raw.split('/item/')[1]
+    if (!/^[0-9a-f]+$/i.test(hex)) return null
+    const n = parseInt(hex, 16)
+    return isNaN(n) ? null : n
+  }
+
+  // Accept bare decimal IDs (emitted by /stream/items/ids)
+  if (/^\d+$/.test(raw)) {
+    const n = parseInt(raw, 10)
+    return isNaN(n) ? null : n
+  }
+
+  // Accept bare hex IDs that are unambiguously hex (contain a-f)
+  if (/^[0-9a-f]+$/i.test(raw) && /[a-f]/i.test(raw)) {
+    const n = parseInt(raw, 16)
+    return isNaN(n) ? null : n
+  }
+
+  return null
 }
 
 // --- Auth helper ---
@@ -63,7 +80,14 @@ async function verifyGReaderAuth(
     return null
   }
   try {
-    const payload = app.jwt.verify<{ email: string }>(token)
+    const payload = app.jwt.verify<{ email: string; token_version: number }>(token)
+    const user = getDb()
+      .prepare('SELECT token_version FROM users WHERE email = ?')
+      .get(payload.email) as { token_version: number } | undefined
+    if (!user || user.token_version !== payload.token_version) {
+      reply.status(401).send('Error=TokenExpired\n')
+      return null
+    }
     return payload.email
   } catch {
     reply.status(401).send('Error=TokenExpired\n')
@@ -78,7 +102,8 @@ interface ArticleRow {
   feed_id: number
   feed_name: string
   title: string
-  url: string
+  feed_url: string
+  article_url: string
   created_at: string | null
   published_at: string | null
   lang: string | null
@@ -114,7 +139,7 @@ function articleToGReaderItem(a: ArticleRow): Record<string, unknown> {
   if (a.liked_at) categories.push('user/-/state/com.google/starred')
   if (a.category_name) categories.push(`user/-/label/${a.category_name}`)
 
-  const feedUrl = a.rss_url ?? a.url
+  const feedUrl = a.rss_url ?? a.feed_url
   return {
     id: itemTagId(a.id),
     crawlTimeMsec: crawlMsec,
@@ -122,8 +147,8 @@ function articleToGReaderItem(a: ArticleRow): Record<string, unknown> {
     published: publishedSec,
     updated: publishedSec,
     title: a.title ?? '(no title)',
-    canonical: [{ href: a.url }],
-    alternate: [{ href: a.url, type: 'text/html' }],
+    canonical: [{ href: a.article_url }],
+    alternate: [{ href: a.article_url, type: 'text/html' }],
     summary: { direction: 'ltr', content: markdownToHtml(a.full_text ?? a.summary ?? a.excerpt ?? '') },
     author: a.feed_name ?? '',
     origin: {
@@ -138,20 +163,27 @@ function articleToGReaderItem(a: ArticleRow): Record<string, unknown> {
 /** Fetch articles enriched with feed rss_url and category_name for GReader responses */
 function getEnrichedArticles(ids: number[]): ArticleRow[] {
   if (ids.length === 0) return []
-  const placeholders = ids.map(() => '?').join(',')
-  const orderCase = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(' ')
-  return getDb().prepare(`
-    SELECT a.id, a.feed_id, f.name AS feed_name, f.rss_url, f.url,
-           a.title, a.url AS article_url,
-           a.created_at, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.full_text,
-           a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
-           c.name AS category_name
-    FROM active_articles a
-    JOIN feeds f ON a.feed_id = f.id
-    LEFT JOIN categories c ON f.category_id = c.id
-    WHERE a.id IN (${placeholders})
-    ORDER BY CASE a.id ${orderCase} END
-  `).all(...ids) as (ArticleRow & { article_url: string })[]
+  const maxSqlParams = 900
+  const results: ArticleRow[] = []
+  for (let i = 0; i < ids.length; i += maxSqlParams) {
+    const batchIds = ids.slice(i, i + maxSqlParams)
+    const placeholders = batchIds.map(() => '?').join(',')
+    const orderCase = batchIds.map((id, j) => `WHEN ${id} THEN ${i + j}`).join(' ')
+    const rows = getDb().prepare(`
+      SELECT a.id, a.feed_id, f.name AS feed_name, f.rss_url, f.url AS feed_url,
+             a.title, a.url AS article_url,
+             a.created_at, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.full_text,
+             a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
+             c.name AS category_name
+      FROM active_articles a
+      JOIN feeds f ON a.feed_id = f.id
+      LEFT JOIN categories c ON f.category_id = c.id
+      WHERE a.id IN (${placeholders})
+      ORDER BY CASE a.id ${orderCase} END
+    `).all(...batchIds) as ArticleRow[]
+    results.push(...rows)
+  }
+  return results
 }
 
 // --- Route registration ---
@@ -162,10 +194,9 @@ export function greaderRoutes(app: FastifyInstance) {
     'application/x-www-form-urlencoded',
     { parseAs: 'string' },
     (_req: FastifyRequest, body: string, done: (err: Error | null, body?: unknown) => void) => {
+      const params = new URLSearchParams(body)
       const parsed: Record<string, string | string[]> = {}
-      for (const part of body.split('&')) {
-        if (!part) continue
-        const [k, v] = part.split('=').map(decodeURIComponent)
+      for (const [k, v] of params.entries()) {
         if (k in parsed) {
           const existing = parsed[k]
           parsed[k] = Array.isArray(existing) ? [...existing, v] : [existing, v]
@@ -283,11 +314,15 @@ export function greaderRoutes(app: FastifyInstance) {
     const ids = articles.map((a) => a.id)
     const createdAtMap = new Map<number, string>()
     if (ids.length > 0) {
-      const placeholders = ids.map(() => '?').join(',')
-      const rows = getDb()
-        .prepare(`SELECT id, created_at FROM articles WHERE id IN (${placeholders})`)
-        .all(...ids) as { id: number; created_at: string }[]
-      for (const r of rows) createdAtMap.set(r.id, r.created_at)
+      const maxSqlParams = 900
+      for (let i = 0; i < ids.length; i += maxSqlParams) {
+        const batchIds = ids.slice(i, i + maxSqlParams)
+        const placeholders = batchIds.map(() => '?').join(',')
+        const rows = getDb()
+          .prepare(`SELECT id, created_at FROM articles WHERE id IN (${placeholders})`)
+          .all(...batchIds) as { id: number; created_at: string }[]
+        for (const r of rows) createdAtMap.set(r.id, r.created_at)
+      }
     }
 
     const filtered = otSec
@@ -317,9 +352,9 @@ export function greaderRoutes(app: FastifyInstance) {
     const body = (request.body ?? {}) as Record<string, string | string[]>
     const rawIds: string[] = Array.isArray(body.i) ? body.i : (body.i ? [body.i] : [])
 
-    const ids = rawIds.map(decodeItemId).filter((id): id is number => id !== null)
+    const ids = rawIds.slice(0, 100).map(decodeItemId).filter((id): id is number => id !== null)
     const rows = getEnrichedArticles(ids)
-    const items = rows.map((row) => articleToGReaderItem({ ...row, url: row.article_url }))
+    const items = rows.map((row) => articleToGReaderItem(row))
 
     reply.header('Content-Type', 'application/json')
     return reply.send({ id: 'user/-/state/com.google/reading-list', updated: Math.floor(Date.now() / 1000), items })
@@ -339,7 +374,7 @@ export function greaderRoutes(app: FastifyInstance) {
     const ids = articles.map((a) => a.id)
     const rows = getEnrichedArticles(ids)
 
-    const items = rows.map((row) => articleToGReaderItem({ ...row, url: row.article_url }))
+    const items = rows.map((row) => articleToGReaderItem(row))
     const nextOffset = offset + limit
     const continuation = nextOffset < total ? Buffer.from(String(nextOffset)).toString('base64') : undefined
 
