@@ -27,7 +27,26 @@ import { getArticles, markArticleSeen, markArticleLiked, markAllSeenByFeed } fro
 import { parseOrBadRequest } from '../lib/validation.js'
 import { logger } from '../logger.js'
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    greaderEmail: string
+  }
+}
+
 const log = logger.child('greader')
+
+/** Maximum SQLite bound parameters per query (hard limit is 999). */
+const MAX_SQL_PARAMS = 900
+
+/** Extract the origin (scheme + host) from a feed URL, falling back to the raw URL. */
+function feedOriginUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    return `${u.protocol}//${u.host}`
+  } catch {
+    return url
+  }
+}
 
 // --- Zod schemas for GReader request bodies ---
 // Form-encoded bodies may send a key multiple times, so scalar fields use a
@@ -190,7 +209,7 @@ function articleToGReaderItem(a: ArticleRow): Record<string, unknown> {
     origin: {
       streamId: `feed/${feedUrl}`,
       title: a.feed_name ?? '',
-      htmlUrl: (() => { try { const u = new URL(feedUrl); return `${u.protocol}//${u.host}` } catch { return feedUrl } })(),
+      htmlUrl: feedOriginUrl(feedUrl),
     },
     categories,
   }
@@ -199,10 +218,9 @@ function articleToGReaderItem(a: ArticleRow): Record<string, unknown> {
 /** Fetch articles enriched with feed rss_url and category_name for GReader responses */
 function getEnrichedArticles(ids: number[]): ArticleRow[] {
   if (ids.length === 0) return []
-  const maxSqlParams = 900
   const results: ArticleRow[] = []
-  for (let i = 0; i < ids.length; i += maxSqlParams) {
-    const batchIds = ids.slice(i, i + maxSqlParams)
+  for (let i = 0; i < ids.length; i += MAX_SQL_PARAMS) {
+    const batchIds = ids.slice(i, i + MAX_SQL_PARAMS)
     const placeholders = batchIds.map(() => '?').join(',')
     const orderCase = batchIds.map((id, j) => `WHEN ${id} THEN ${i + j}`).join(' ')
     const rows = getDb().prepare(`
@@ -225,6 +243,10 @@ function getEnrichedArticles(ids: number[]): ArticleRow[] {
 // --- Route registration ---
 
 export async function greaderRoutes(app: FastifyInstance): Promise<void> {
+  // Register greaderEmail on the request object so it can be set in the auth
+  // preHandler hook and read type-safely in route handlers.
+  app.decorateRequest('greaderEmail', '')
+
   // Parse application/x-www-form-urlencoded bodies (scoped to this plugin)
   app.addContentTypeParser(
     'application/x-www-form-urlencoded',
@@ -278,13 +300,13 @@ export async function greaderRoutes(app: FastifyInstance): Promise<void> {
     if (!request.url.startsWith('/reader/api/')) return
     const email = await verifyGReaderAuth(request, reply, app)
     if (!email) return // reply already sent
-    ;(request as FastifyRequest & { greaderEmail: string }).greaderEmail = email
+    request.greaderEmail = email
   })
 
   // ── User info ────────────────────────────────────────────────────────────────
 
   app.get('/reader/api/0/user-info', async (request, reply) => {
-    const email = (request as FastifyRequest & { greaderEmail: string }).greaderEmail
+    const email = request.greaderEmail
     reply.header('Content-Type', 'application/json')
     return reply.send({
       userId: email,
@@ -309,21 +331,17 @@ export async function greaderRoutes(app: FastifyInstance): Promise<void> {
     const feeds = getFeeds().filter((f) => f.type !== 'clip')
     const subscriptions = feeds.map((f) => {
       const feedUrl = f.rss_url ?? f.url
-      const sub: Record<string, unknown> = {
+      const categories: { id: string; label: string }[] = f.category_id && f.category_name
+        ? [{ id: `user/-/label/${f.category_name}`, label: f.category_name }]
+        : []
+      return {
         id: `feed/${feedUrl}`,
         title: f.name,
-        htmlUrl: (() => { try { const u = new URL(feedUrl); return `${u.protocol}//${u.host}` } catch { return feedUrl } })(),
+        htmlUrl: feedOriginUrl(feedUrl),
         iconUrl: '',
         firstitemmsec: '0',
-        categories: [] as { id: string; label: string }[],
+        categories,
       }
-      if (f.category_id && f.category_name) {
-        (sub.categories as { id: string; label: string }[]).push({
-          id: `user/-/label/${f.category_name}`,
-          label: f.category_name,
-        })
-      }
-      return sub
     })
     reply.header('Content-Type', 'application/json')
     return reply.send({ subscriptions })
@@ -351,18 +369,23 @@ export async function greaderRoutes(app: FastifyInstance): Promise<void> {
       const n = Number(q.n ?? 10000)
       return Number.isFinite(n) && n >= 1 ? Math.min(n, 10000) : 10000
     })()
-    const otSec = q.ot ? Number(Array.isArray(q.ot) ? q.ot[0] : q.ot) : null
+    const otSec = (() => {
+      if (!q.ot) return null
+      const raw = Array.isArray(q.ot) ? q.ot[0] : q.ot
+      const n = Number(raw)
+      return Number.isFinite(n) && n > 0 ? n : null
+    })()
 
     const opts = buildArticleOpts(stream, exclude)
     const { articles } = getArticles({ ...opts, limit, offset: 0 })
 
-    // Fetch created_at for each article (used for ot filter and timestampUsec)
+    // Fetch created_at for each article (used for ot filter and timestampUsec).
+    // getArticles() returns ArticleListItem which omits created_at, so we query it separately.
     const ids = articles.map((a) => a.id)
     const createdAtMap = new Map<number, string>()
     if (ids.length > 0) {
-      const maxSqlParams = 900
-      for (let i = 0; i < ids.length; i += maxSqlParams) {
-        const batchIds = ids.slice(i, i + maxSqlParams)
+      for (let i = 0; i < ids.length; i += MAX_SQL_PARAMS) {
+        const batchIds = ids.slice(i, i + MAX_SQL_PARAMS)
         const placeholders = batchIds.map(() => '?').join(',')
         const rows = getDb()
           .prepare(`SELECT id, created_at FROM articles WHERE id IN (${placeholders})`)
