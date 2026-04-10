@@ -19,7 +19,7 @@
 import { compareSync } from 'bcryptjs'
 import { marked } from 'marked'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { getDb } from '../db/connection.js'
+import { getDb, getSetting } from '../db.js'
 import { getFeeds } from '../db/feeds.js'
 import { getCategories, markAllSeenByCategory } from '../db/categories.js'
 import { getArticles, markArticleSeen, markArticleLiked, markAllSeenByFeed } from '../db/articles.js'
@@ -209,10 +209,19 @@ export function greaderRoutes(app: FastifyInstance) {
   )
   // ── Authentication ──────────────────────────────────────────────────────────
 
-  app.post('/accounts/ClientLogin', async (request, reply) => {
-    const body = (request.body ?? {}) as Record<string, string>
-    const email = (body.Email ?? '').trim().toLowerCase()
-    const passwd = body.Passwd ?? ''
+  app.post('/accounts/ClientLogin', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
+    if (getSetting('auth.password_enabled') === '0') {
+      reply.header('Content-Type', 'text/plain')
+      return reply.status(403).send('Error=PasswordAuthDisabled\n')
+    }
+
+    const rawBody = (request.body ?? {}) as Record<string, string | string[]>
+    const emailRaw = Array.isArray(rawBody.Email) ? rawBody.Email[0] : (rawBody.Email ?? '')
+    const passwdRaw = Array.isArray(rawBody.Passwd) ? rawBody.Passwd[0] : (rawBody.Passwd ?? '')
+    const email = emailRaw.trim().toLowerCase()
+    const passwd = passwdRaw
 
     const user = getDb()
       .prepare('SELECT email, password_hash, token_version FROM users WHERE LOWER(email) = ?')
@@ -304,7 +313,10 @@ export function greaderRoutes(app: FastifyInstance) {
     const q = request.query as Record<string, string | string[]>
     const stream = Array.isArray(q.s) ? q.s[0] : (q.s ?? 'user/-/state/com.google/reading-list')
     const exclude = Array.isArray(q.xt) ? q.xt[0] : (q.xt ?? '')
-    const limit = Math.min(Number(q.n ?? 10000), 10000)
+    const limit = (() => {
+      const n = Number(q.n ?? 10000)
+      return Number.isFinite(n) && n >= 1 ? Math.min(n, 10000) : 10000
+    })()
     const otSec = q.ot ? Number(Array.isArray(q.ot) ? q.ot[0] : q.ot) : null
 
     const opts = buildArticleOpts(stream, exclude)
@@ -366,8 +378,15 @@ export function greaderRoutes(app: FastifyInstance) {
     const q = request.query as Record<string, string>
     const stream = decodeURIComponent((request.params as Record<string, string>)['*'] ?? '')
     const exclude = q.xt ?? ''
-    const limit = Math.min(Number(q.n ?? 20), 100)
-    const offset = q.c ? Number(Buffer.from(q.c, 'base64').toString()) : 0
+    const limit = (() => {
+      const n = Number(q.n ?? 20)
+      return Number.isFinite(n) && n >= 1 ? Math.min(n, 100) : 20
+    })()
+    const offset = (() => {
+      if (!q.c) return 0
+      const decoded = Number(Buffer.from(q.c, 'base64').toString())
+      return Number.isFinite(decoded) && decoded >= 0 ? decoded : 0
+    })()
 
     const opts = buildArticleOpts(stream, exclude)
     const { articles, total } = getArticles({ ...opts, limit, offset })
@@ -431,8 +450,8 @@ export function greaderRoutes(app: FastifyInstance) {
       const cat = cats.find((c) => c.name === labelName)
       if (cat) markAllSeenByCategory(cat.id)
     } else if (stream === 'user/-/state/com.google/reading-list') {
-      // Mark all articles as read
-      getDb().prepare("UPDATE articles SET seen_at = datetime('now'), read_at = datetime('now') WHERE seen_at IS NULL").run()
+      // Mark all articles as seen (uses seen_at to match existing semantics)
+      getDb().prepare("UPDATE articles SET seen_at = datetime('now') WHERE seen_at IS NULL").run()
     }
 
     reply.header('Content-Type', 'text/plain')
