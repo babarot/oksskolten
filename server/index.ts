@@ -83,7 +83,7 @@ await app.register(jwt, {
 await app.register(rateLimit, {
   max: RATE_LIMIT_MAX,
   timeWindow: RATE_LIMIT_WINDOW,
-  allowList: (req) => !req.url.startsWith('/api'),
+  allowList: (req) => !req.url.startsWith('/api') && !req.url.startsWith('/reader') && !req.url.startsWith('/accounts'),
 })
 await app.register(multipart, {
   limits: { fileSize: MULTIPART_MAX_FILE_SIZE },
