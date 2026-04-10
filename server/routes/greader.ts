@@ -16,6 +16,7 @@
  *   POST /reader/api/0/mark-all-as-read
  */
 
+import { z } from 'zod'
 import { compareSync } from 'bcryptjs'
 import { marked } from 'marked'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
@@ -23,6 +24,40 @@ import { getDb, getSetting } from '../db.js'
 import { getFeeds } from '../db/feeds.js'
 import { getCategories, markAllSeenByCategory } from '../db/categories.js'
 import { getArticles, markArticleSeen, markArticleLiked, markAllSeenByFeed } from '../db/articles.js'
+import { parseOrBadRequest } from '../lib/validation.js'
+import { logger } from '../logger.js'
+
+const log = logger.child('greader')
+
+// --- Zod schemas for GReader request bodies ---
+// Form-encoded bodies may send a key multiple times, so scalar fields use a
+// union that normalises to a single string via transform.
+
+const scalar = z
+  .union([z.string(), z.array(z.string())])
+  .transform((v) => (Array.isArray(v) ? v[0] : v))
+
+const ids = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((v) => (!v ? [] : Array.isArray(v) ? v : [v]))
+
+const ClientLoginBody = z.object({
+  Email: scalar.pipe(z.string().min(1, 'Email required')),
+  Passwd: scalar.pipe(z.string().min(1, 'Passwd required')),
+})
+
+const StreamItemsContentsBody = z.object({ i: ids })
+
+const EditTagBody = z.object({
+  i: ids,
+  a: scalar.optional().default(''),
+  r: scalar.optional().default(''),
+})
+
+const MarkAllAsReadBody = z.object({
+  s: scalar.optional().default(''),
+})
 
 // --- ID helpers ---
 
@@ -85,6 +120,7 @@ async function verifyGReaderAuth(
       .prepare('SELECT token_version FROM users WHERE email = ?')
       .get(payload.email) as { token_version: number } | undefined
     if (!user || user.token_version !== payload.token_version) {
+      log.warn('GReader token rejected (version mismatch) for', payload.email)
       reply.status(401).send('Error=TokenExpired\n')
       return null
     }
@@ -188,7 +224,7 @@ function getEnrichedArticles(ids: number[]): ArticleRow[] {
 
 // --- Route registration ---
 
-export function greaderRoutes(app: FastifyInstance) {
+export async function greaderRoutes(app: FastifyInstance): Promise<void> {
   // Parse application/x-www-form-urlencoded bodies (scoped to this plugin)
   app.addContentTypeParser(
     'application/x-www-form-urlencoded',
@@ -217,17 +253,15 @@ export function greaderRoutes(app: FastifyInstance) {
       return reply.status(403).send('Error=PasswordAuthDisabled\n')
     }
 
-    const rawBody = (request.body ?? {}) as Record<string, string | string[]>
-    const emailRaw = Array.isArray(rawBody.Email) ? rawBody.Email[0] : (rawBody.Email ?? '')
-    const passwdRaw = Array.isArray(rawBody.Passwd) ? rawBody.Passwd[0] : (rawBody.Passwd ?? '')
-    const email = emailRaw.trim().toLowerCase()
-    const passwd = passwdRaw
+    const body = parseOrBadRequest(ClientLoginBody, request.body, reply)
+    if (!body) return
 
     const user = getDb()
       .prepare('SELECT email, password_hash, token_version FROM users WHERE LOWER(email) = ?')
-      .get(email) as { email: string; password_hash: string; token_version: number } | undefined
+      .get(body.Email.toLowerCase()) as { email: string; password_hash: string; token_version: number } | undefined
 
-    if (!user || !compareSync(passwd, user.password_hash)) {
+    if (!user || !compareSync(body.Passwd, user.password_hash)) {
+      log.warn('GReader ClientLogin failed for', body.Email)
       reply.status(403)
       reply.header('Content-Type', 'text/plain')
       return reply.send('Error=BadAuthentication\n')
@@ -361,10 +395,10 @@ export function greaderRoutes(app: FastifyInstance) {
   // ── Fetch specific items ─────────────────────────────────────────────────────
 
   app.post('/reader/api/0/stream/items/contents', async (request, reply) => {
-    const body = (request.body ?? {}) as Record<string, string | string[]>
-    const rawIds: string[] = Array.isArray(body.i) ? body.i : (body.i ? [body.i] : [])
+    const body = parseOrBadRequest(StreamItemsContentsBody, request.body, reply)
+    if (!body) return
 
-    const ids = rawIds.slice(0, 100).map(decodeItemId).filter((id): id is number => id !== null)
+    const ids = body.i.slice(0, 100).map(decodeItemId).filter((id): id is number => id !== null)
     const rows = getEnrichedArticles(ids)
     const items = rows.map((row) => articleToGReaderItem(row))
 
@@ -409,14 +443,14 @@ export function greaderRoutes(app: FastifyInstance) {
   // ── Edit tag (mark read/unread/starred) ──────────────────────────────────────
 
   app.post('/reader/api/0/edit-tag', async (request, reply) => {
-    const body = (request.body ?? {}) as Record<string, string | string[]>
-    const rawIds: string[] = Array.isArray(body.i) ? body.i : (body.i ? [body.i] : [])
-    const addTag = Array.isArray(body.a) ? body.a[0] : (body.a ?? '')
-    const removeTag = Array.isArray(body.r) ? body.r[0] : (body.r ?? '')
+    const body = parseOrBadRequest(EditTagBody, request.body, reply)
+    if (!body) return
 
-    const ids = rawIds.map(decodeItemId).filter((id): id is number => id !== null)
+    const articleIds = body.i.map(decodeItemId).filter((id): id is number => id !== null)
+    const addTag = body.a
+    const removeTag = body.r
 
-    for (const id of ids) {
+    for (const id of articleIds) {
       if (addTag.includes('com.google/read') || removeTag.includes('com.google/kept-unread')) {
         markArticleSeen(id, true)
       } else if (removeTag.includes('com.google/read') || addTag.includes('com.google/kept-unread')) {
@@ -436,8 +470,10 @@ export function greaderRoutes(app: FastifyInstance) {
   // ── Mark all as read ─────────────────────────────────────────────────────────
 
   app.post('/reader/api/0/mark-all-as-read', async (request, reply) => {
-    const body = (request.body ?? {}) as Record<string, string>
-    const stream = body.s ?? ''
+    const body = parseOrBadRequest(MarkAllAsReadBody, request.body, reply)
+    if (!body) return
+
+    const stream = body.s
 
     if (stream.startsWith('feed/')) {
       const feedUrl = stream.slice('feed/'.length)
