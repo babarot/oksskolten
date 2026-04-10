@@ -17,6 +17,7 @@ import { registerChatApi } from './chatRoutes.js'
 import { authRoutes } from './authRoutes.js'
 import { passkeyRoutes } from './passkeyRoutes.js'
 import { oauthRoutes } from './oauthRoutes.js'
+import { greaderRoutes } from './routes/greader.js'
 import { fetchAllFeeds } from './fetcher.js'
 import { rebuildSearchIndex, isSearchReady, syncAllScoredArticlesToSearch } from './search/sync.js'
 
@@ -82,7 +83,7 @@ await app.register(jwt, {
 await app.register(rateLimit, {
   max: RATE_LIMIT_MAX,
   timeWindow: RATE_LIMIT_WINDOW,
-  allowList: (req) => !req.url.startsWith('/api'),
+  allowList: (req) => !req.url.startsWith('/api') && !req.url.startsWith('/reader') && !req.url.startsWith('/accounts'),
 })
 await app.register(multipart, {
   limits: { fileSize: MULTIPART_MAX_FILE_SIZE },
@@ -129,6 +130,7 @@ app.get('/api/health', async (_req, reply) => {
 app.register(authRoutes)
 app.register(passkeyRoutes)
 app.register(oauthRoutes)
+app.register(greaderRoutes)
 
 // Protected API routes
 registerApi(app)
