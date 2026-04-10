@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.5.0](https://github.com/babarot/oksskolten/compare/v0.4.2...v0.5.0) - 2026-04-10
+### New Features
+- feat: add support for vLLM LLM provider by @pju-hoge in https://github.com/babarot/oksskolten/pull/56
+### Bug fixes
+- Update feed items with excerpt by @asonas in https://github.com/babarot/oksskolten/pull/51
+- fix: add type="button" to cancel button in FolderStep by @tenajima in https://github.com/babarot/oksskolten/pull/66
+### Improvements
+- Add fallback mechanism for RSS description as article content by @asonas in https://github.com/babarot/oksskolten/pull/46
+- feat(chat): increase tool round limit and add batch tools by @pju-hoge in https://github.com/babarot/oksskolten/pull/61
+- Replace skip checkbox with two-phase choice flow for feed scope by @babarot in https://github.com/babarot/oksskolten/pull/54
+
 ## [v0.4.2](https://github.com/babarot/oksskolten/compare/v0.4.1...v0.4.2) - 2026-03-26
 ### Improvements
 - Add support for custom key bindings in settings by @asonas in https://github.com/babarot/oksskolten/pull/37
