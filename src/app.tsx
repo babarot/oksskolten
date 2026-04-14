@@ -90,7 +90,9 @@ function AppLayout() {
       <TooltipProvider delayDuration={300}>
         <div className="min-h-screen bg-bg text-text">
           <FetchProgressProvider>
-            <Outlet context={{ settings, sidebarOpen, setSidebarOpen }} />
+            <KeyboardNavigationProvider>
+              <Outlet context={{ settings, sidebarOpen, setSidebarOpen }} />
+            </KeyboardNavigationProvider>
           </FetchProgressProvider>
           <Toaster
             theme="system"
@@ -225,10 +227,10 @@ function ArticleDetailPage() {
   const articleUrl = `https://${decodeURIComponent(splat)}`
 
   return (
-    <KeyboardNavigationProvider>
+    <>
       <Header mode="detail" />
       <ArticleDetail articleUrl={articleUrl} />
-    </KeyboardNavigationProvider>
+    </>
   )
 }
 
