@@ -107,7 +107,7 @@ export function ArticleDetail({ articleUrl }: ArticleDetailProps) {
 
   const { rewrittenHtml: displayContent } = useRewriteInternalLinks(
     content,
-    article?.url || articleUrl,
+    articleUrl,
     internalLinks === 'on',
   )
 
