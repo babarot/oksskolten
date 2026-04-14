@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom'
 import { LocaleContext } from '../../lib/i18n'
+import { KeyboardNavigationProvider } from '../../contexts/keyboard-navigation-context'
 import type { ArticleListItem } from '../../../shared/types'
 
 // --- Mocks ---
@@ -74,13 +75,6 @@ vi.mock('../../contexts/fetch-progress-context', () => ({
   }),
 }))
 
-const noopSetFocusedItemId = () => {}
-vi.mock('../../contexts/keyboard-navigation-context', () => ({
-  useKeyboardNavigationContext: () => ({
-    focusedItemId: null,
-    setFocusedItemId: noopSetFocusedItemId,
-  }),
-}))
 
 vi.mock('../ui/mascot', () => ({
   Mascot: () => <div data-testid="mascot" />,
@@ -169,7 +163,11 @@ const mockSettings = {
 }
 
 function OutletWrapper() {
-  return <Outlet context={{ settings: mockSettings, sidebarOpen: false, setSidebarOpen: vi.fn() }} />
+  return (
+    <KeyboardNavigationProvider>
+      <Outlet context={{ settings: mockSettings, sidebarOpen: false, setSidebarOpen: vi.fn() }} />
+    </KeyboardNavigationProvider>
+  )
 }
 
 function renderArticleList(initialPath = '/inbox') {
