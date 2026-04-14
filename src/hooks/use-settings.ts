@@ -86,7 +86,7 @@ export function useSettings() {
   const [translateTargetLang, setTranslateTargetLangState] = useState<string | null>(null)
 
   // --- DB sync ---
-  const { data: prefs } = useSWR<Prefs>(
+  const { data: prefs, mutate: mutatePrefs } = useSWR<Prefs>(
     '/api/settings/preferences',
     fetcher,
     { revalidateOnFocus: false, revalidateOnReconnect: false },
@@ -213,14 +213,20 @@ export function useSettings() {
     const patch = { ...pendingRef.current }
     pendingRef.current = {}
     if (Object.keys(patch).length > 0) {
+      const keys = Object.keys(patch)
       fetch('/api/settings/preferences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(patch),
         keepalive: true,
-      }).catch(() => {})
+      })
+        .then(() => {
+          for (const key of keys) dirtyKeysRef.current.delete(key)
+          if (prefs) void mutatePrefs({ ...prefs, ...patch }, false)
+        })
+        .catch(() => {})
     }
-  }, [])
+  }, [prefs, mutatePrefs])
 
   // Debounced save: 500ms after last change
   const scheduleSave = useCallback(() => {
@@ -230,10 +236,16 @@ export function useSettings() {
       const patch = { ...pendingRef.current }
       pendingRef.current = {}
       if (Object.keys(patch).length > 0) {
-        apiPatch('/api/settings/preferences', patch).catch(() => {})
+        const keys = Object.keys(patch)
+        apiPatch('/api/settings/preferences', patch)
+          .then(() => {
+            for (const key of keys) dirtyKeysRef.current.delete(key)
+            if (prefs) void mutatePrefs({ ...prefs, ...patch }, false)
+          })
+          .catch(() => {})
       }
     }, SETTINGS_SYNC_DEBOUNCE_MS)
-  }, [])
+  }, [prefs, mutatePrefs])
 
   // Flush on beforeunload + unmount
   useEffect(() => {
