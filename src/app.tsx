@@ -14,6 +14,7 @@ import { ArticleList, type ArticleListHandle } from './components/article/articl
 import { ArticleDetail } from './components/article/article-detail'
 import { ArticleRawPage } from './components/article/article-raw-page'
 import { PageLayout } from './components/layout/page-layout'
+import { KeyboardNavigationProvider } from './contexts/keyboard-navigation-context'
 const SettingsPage = lazy(() => import('./pages/settings-page').then(m => ({ default: m.SettingsPage })))
 const ChatPage = lazy(() => import('./pages/chat-page').then(m => ({ default: m.ChatPage })))
 const HomePage = lazy(() => import('./pages/home-page').then(m => ({ default: m.HomePage })))
@@ -224,10 +225,10 @@ function ArticleDetailPage() {
   const articleUrl = `https://${decodeURIComponent(splat)}`
 
   return (
-    <>
+    <KeyboardNavigationProvider>
       <Header mode="detail" />
       <ArticleDetail articleUrl={articleUrl} />
-    </>
+    </KeyboardNavigationProvider>
   )
 }
 
