@@ -52,6 +52,7 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
     TRANSLATE_SERVICE_PROVIDERS.forEach((p, i) => { map[p] = !!translateKeyStatuses[i].data?.configured })
     map['claude-code'] = claudeCodeReady
     map['ollama'] = true  // Ollama requires no API key; always available
+    map['vllm'] = true    // vLLM requires no API key by default; always available
     return map
     // Recompute only when any key's configured status changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,9 +60,8 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
     anthropicKey.data?.configured, geminiKey.data?.configured, openaiKey.data?.configured,
     googleTranslateKey.data?.configured, deeplKey.data?.configured, claudeCodeReady,
   ])
-  // Ollama requires no API key, so the task section is always enabled when Ollama is available as a provider.
-  // This is intentional: users should be able to configure provider/model even before starting the Ollama server.
-  const hasAnyLlmKey = LLM_API_PROVIDERS.some(p => configuredKeys[p]) || claudeCodeReady || configuredKeys['ollama']
+  // Ollama/vLLM requires no API key, so the task section is always enabled when they are available.
+  const hasAnyLlmKey = LLM_API_PROVIDERS.some(p => configuredKeys[p]) || claudeCodeReady || configuredKeys['ollama'] || configuredKeys['vllm']
   const hasAnyTranslateKey = TRANSLATE_SERVICE_PROVIDERS.some(p => configuredKeys[p])
   const hasAnyKey = hasAnyLlmKey || hasAnyTranslateKey
   const keysLoading = llmKeyStatuses.some(s => !s.data) || translateKeyStatuses.some(s => !s.data)
@@ -72,8 +72,8 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
       providerValue: settings.chatProvider || '',
       setProvider: (v) => {
         settings.setChatProvider(v)
-        // Ollama models are dynamic; don't set a default (auto-selected by ModelSelect)
-        if (v !== 'ollama') settings.setChatModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
+        // Ollama/vLLM models are dynamic; don't set a default (auto-selected by ModelSelect)
+        if (v !== 'ollama' && v !== 'vllm') settings.setChatModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
         else settings.setChatModel('')
       },
       modelValue: settings.chatModel || '',
@@ -85,7 +85,7 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
       providerValue: settings.summaryProvider || '',
       setProvider: (v) => {
         settings.setSummaryProvider(v)
-        if (v !== 'ollama') settings.setSummaryModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
+        if (v !== 'ollama' && v !== 'vllm') settings.setSummaryModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
         else settings.setSummaryModel('')
       },
       modelValue: settings.summaryModel || '',
@@ -97,7 +97,7 @@ export function TaskModelSection({ settings, t }: { settings: Settings; t: TFunc
       providerValue: settings.translateProvider || '',
       setProvider: (v) => {
         settings.setTranslateProvider(v)
-        if (v !== 'ollama') settings.setTranslateModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
+        if (v !== 'ollama' && v !== 'vllm') settings.setTranslateModel(DEFAULT_MODELS[v] || DEFAULT_MODELS.anthropic)
         else settings.setTranslateModel('')
       },
       modelValue: settings.translateModel || '',
@@ -258,12 +258,26 @@ function ModelSelect({ provider, modelValue, setModel, t }: { provider: string; 
     { revalidateOnFocus: false },
   )
 
+  // vLLM: fetch dynamic model list
+  const { data: vllmModels } = useSWR<{ models: Array<{ name: string }> }>(
+    provider === 'vllm' ? '/api/settings/vllm/models' : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  )
+
   // Auto-select first Ollama model when switching to ollama and no model is set
   useEffect(() => {
     if (provider === 'ollama' && ollamaModels?.models?.length && !modelValue) {
       setModel(ollamaModels.models[0].name)
     }
   }, [provider, ollamaModels, modelValue, setModel])
+
+  // Auto-select first vLLM model when switching to vllm and no model is set
+  useEffect(() => {
+    if (provider === 'vllm' && vllmModels?.models?.length && !modelValue) {
+      setModel(vllmModels.models[0].name)
+    }
+  }, [provider, vllmModels, modelValue, setModel])
 
   if (!provider) {
     return (
@@ -298,6 +312,36 @@ function ModelSelect({ provider, modelValue, setModel, t }: { provider: string; 
             {models.map(m => (
               <SelectItem key={m.name} value={m.name}>
                 {m.name}{m.parameter_size ? ` (${m.parameter_size})` : ''}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    )
+  }
+
+  if (provider === 'vllm') {
+    const models = vllmModels?.models || []
+    if (models.length === 0) {
+      return (
+        <Select disabled>
+          <SelectTrigger>
+            <SelectValue placeholder={t('vllm.noModels')} />
+          </SelectTrigger>
+          <SelectContent />
+        </Select>
+      )
+    }
+    return (
+      <Select value={modelValue || undefined} onValueChange={setModel}>
+        <SelectTrigger>
+          <SelectValue placeholder={t('integration.selectModel')} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {models.map(m => (
+              <SelectItem key={m.name} value={m.name}>
+                {m.name}
               </SelectItem>
             ))}
           </SelectGroup>

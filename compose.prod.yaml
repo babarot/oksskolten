@@ -22,6 +22,7 @@ services:
       CRON_SCHEDULE: "*/5 * * * *"
       MEILI_URL: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      VLLM_BASE_URL: http://host.docker.internal:8000
     env_file:
       - path: .env
         required: false

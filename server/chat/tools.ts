@@ -206,6 +206,27 @@ const markAsReadTool: ToolDef = {
   },
 }
 
+const markArticlesAsReadTool: ToolDef = {
+  name: 'mark_articles_as_read',
+  description: 'Mark multiple articles as read in one go.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      article_ids: { type: 'array', items: { type: 'number' }, description: 'List of article IDs' },
+    },
+    required: ['article_ids'],
+  },
+  execute: async (input) => {
+    const ids = input.article_ids as number[]
+    if (!Array.isArray(ids) || ids.length === 0) return JSON.stringify({ success: true, count: 0 })
+    let count = 0
+    for (const id of ids) {
+      if (markArticleSeen(id, true)) count++
+    }
+    return JSON.stringify({ success: true, count })
+  },
+}
+
 const toggleLikeTool: ToolDef = {
   name: 'toggle_like',
   description: 'Toggle the like status of an article. Removes like if already liked, adds like if not.',
@@ -263,6 +284,45 @@ const summarizeArticleTool: ToolDef = {
     const { summary } = await summarizeArticle(article.full_text)
     updateArticleContent(article.id, { summary })
     return JSON.stringify({ summary })
+  },
+}
+
+const summarizeArticlesTool: ToolDef = {
+  name: 'summarize_articles',
+  description: 'Summarize multiple articles in the user\'s preferred language. Returns cached summaries where available.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      article_ids: { type: 'array', items: { type: 'number' }, description: 'List of article IDs' },
+    },
+    required: ['article_ids'],
+  },
+  execute: async (input) => {
+    const ids = input.article_ids as number[]
+    if (!Array.isArray(ids) || ids.length === 0) return JSON.stringify([])
+
+    const results: any[] = []
+    const CONCURRENCY = 3
+    for (let i = 0; i < ids.length; i += CONCURRENCY) {
+      const chunk = ids.slice(i, i + CONCURRENCY)
+      const chunkResults = await Promise.all(chunk.map(async (id) => {
+        const article = getArticleById(id)
+        if (!article) return { id, error: 'Article not found' }
+        if (article.summary) return { id, summary: article.summary, cached: true }
+        if (!article.full_text) return { id, error: 'No full text available' }
+
+        try {
+          const { summary } = await summarizeArticle(article.full_text)
+          updateArticleContent(article.id, { summary })
+          return { id, summary }
+        } catch (err) {
+          return { id, error: err instanceof Error ? err.message : String(err) }
+        }
+      }))
+      results.push(...chunkResults)
+    }
+
+    return JSON.stringify(results)
   },
 }
 
@@ -529,9 +589,11 @@ export const TOOLS: ToolDef[] = [
   getCategoriesTool,
   getReadingStatsTool,
   markAsReadTool,
+  markArticlesAsReadTool,
   toggleLikeTool,
   toggleBookmarkTool,
   summarizeArticleTool,
+  summarizeArticlesTool,
   translateArticleTool,
 ]
 

@@ -48,7 +48,7 @@ export function FolderStep({ onClose, onCategoryCreated }: FolderStepProps) {
       />
       {error && <p className="text-xs text-error">{error}</p>}
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" onClick={onClose}>
           {t('modal.cancel')}
         </Button>
         <Button type="submit" disabled={loading}>

@@ -645,6 +645,9 @@ Response headers:
 | `name` | No | Display name (auto-uses RSS feed title or hostname if omitted) |
 | `rss_bridge_url` | No | URL when using RSSBridge |
 | `category_id` | No | Category ID |
+| `discovered_rss_url` | No | HTTPS URL of a previously discovered RSS feed. When set, skip discovery and use this URL directly (Phase 2: user chose "whole site"). |
+| `discovered_rss_title` | No | Title of the discovered RSS feed. Used for auto-naming when `name` is omitted. |
+| `force_page_selector` | No | If `true`, skip Steps 1–2 and go straight to LLM CSS selector inference (Phase 2: user chose "this page only"). Mutually exclusive with `discovered_rss_url`. |
 
 Processing flow:
 1. Check `url` for duplicates → `409 { "error": "Feed URL already exists" }` on duplicate
@@ -672,6 +675,12 @@ data: {"type":"done","feed":{"id":1,"name":"...","rss_url":"...","rss_bridge_url
 Step names: `rss-discovery`, `flaresolverr` (conditional), `rss-bridge`, `css-selector`
 Statuses: `pending`, `running`, `done`, `skipped`
 The `flaresolverr` step is a child step of RSS discovery and is displayed hierarchically in the UI. It does not appear under normal conditions (when bot auth is not needed).
+
+**Two-phase choice flow**: When Step 1 finds an RSS feed, the server sends a `choice_needed` event and ends the SSE stream without creating a feed:
+```
+data: {"type":"choice_needed","rss_url":"https://example.com/rss","rss_title":"Example Feed"}
+```
+The frontend then presents the user with a choice: "Subscribe to the whole site" or "Subscribe to this page only". The user's choice triggers a second `POST /api/feeds` with either `discovered_rss_url`/`discovered_rss_title` or `force_page_selector: true`.
 
 ```json
 // Response (feed object from the final event):

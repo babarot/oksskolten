@@ -687,3 +687,29 @@ describe('PATCH /api/settings/preferences — retention validation', () => {
     expect(res.statusCode).toBe(400)
   })
 })
+
+describe('vLLM endpoints', () => {
+  it('GET /api/settings/vllm/status returns connection failed when unreachable', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/settings/vllm/status',
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.ok).toBe(false)
+    expect(body.error).toBeDefined()
+  })
+
+  it('PATCH /api/settings/preferences updates vllm.base_url', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/preferences',
+      headers: json,
+      payload: { 'vllm.base_url': 'http://vllm:8000' },
+    })
+    expect(res.statusCode).toBe(200)
+    const { getSetting } = await import('../db.js')
+    expect(getSetting('vllm.base_url')).toBe('http://vllm:8000')
+  })
+})
+

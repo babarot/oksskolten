@@ -5,7 +5,7 @@ import { deeplTranslate } from '../providers/translate/deepl.js'
 import { TASK_DEFAULTS } from '../../shared/models.js'
 import { DEFAULT_LANGUAGE, languageName } from '../../shared/lang.js'
 
-export type AiBillingMode = 'anthropic' | 'gemini' | 'openai' | 'claude-code' | 'ollama' | 'google-translate' | 'deepl'
+export type AiBillingMode = 'anthropic' | 'gemini' | 'openai' | 'claude-code' | 'ollama' | 'vllm' | 'google-translate' | 'deepl'
 
 export interface AiTextResult {
   inputTokens: number

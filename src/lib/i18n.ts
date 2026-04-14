@@ -180,6 +180,10 @@ const dict = {
   'modal.step.found': { ja: '検出', en: 'Found' },
   'modal.step.notFound': { ja: 'この段階では未検出', en: 'Not detected at this step' },
   'modal.step.skipped': { ja: 'スキップ', en: 'Skipped' },
+  'modal.choiceTitle': { ja: 'サイト全体のRSSフィードが見つかりました', en: 'Found a site-wide RSS feed' },
+  'modal.choiceWholeSite': { ja: 'サイト全体を購読', en: 'Subscribe to the whole site' },
+  'modal.choiceThisPage': { ja: 'このページだけを購読', en: 'Subscribe to this page only' },
+  'modal.errorPageExtract': { ja: 'このページからコンテンツを抽出できませんでした', en: 'Could not extract content from this page' },
 
   // Settings
   'feeds.dateFormat': { ja: '日付表示', en: 'Date' },
@@ -681,6 +685,7 @@ const dict = {
   'provider.openai': { ja: 'OpenAI API', en: 'OpenAI API' },
   'provider.claudeCode': { ja: 'Claude Code', en: 'Claude Code' },
   'provider.ollama': { ja: 'Ollama', en: 'Ollama' },
+  'provider.vllm': { ja: 'vLLM', en: 'vLLM' },
   'provider.googleTranslate': { ja: 'Google Translate', en: 'Google Translate' },
   'provider.deepl': { ja: 'DeepL', en: 'DeepL' },
   'ollama.baseUrl': { ja: 'Ollama サーバー URL', en: 'Ollama Server URL' },
@@ -698,6 +703,19 @@ const dict = {
   'ollama.headerValue': { ja: '値', en: 'Value' },
   'ollama.addHeader': { ja: '追加', en: 'Add' },
   'ollama.headersSaved': { ja: 'カスタムヘッダーを保存しました', en: 'Custom headers saved' },
+
+  // vLLM
+  'vllm.baseUrl': { ja: 'vLLM サーバー URL', en: 'vLLM Server URL' },
+  'vllm.baseUrlDesc': { ja: 'vLLM サーバーのアドレスを設定', en: 'Set the vLLM server address' },
+  'vllm.baseUrlPlaceholder': { ja: 'http://localhost:8000', en: 'http://localhost:8000' },
+  'vllm.baseUrlSaved': { ja: 'vLLM サーバー URL を保存しました', en: 'vLLM server URL saved' },
+  'vllm.testConnection': { ja: '接続テスト', en: 'Test Connection' },
+  'vllm.testing': { ja: 'テスト中...', en: 'Testing...' },
+  'vllm.connected': { ja: '接続成功', en: 'Connected' },
+  'vllm.connectionFailed': { ja: '接続失敗', en: 'Connection failed' },
+  'vllm.noModels': { ja: 'vLLM に接続できません', en: 'Cannot connect to vLLM' },
+  'vllm.apiKeySaved': { ja: 'vLLM API キーを保存しました', en: 'vLLM API key saved' },
+  'vllm.apiKeyDeleted': { ja: 'vLLM API キーを削除しました', en: 'vLLM API key deleted' },
   'googleTranslate.apiKeySaved': { ja: 'Google Translate API キーを保存しました', en: 'Google Translate API key saved' },
   'googleTranslate.apiKeyDeleted': { ja: 'Google Translate API キーを削除しました', en: 'Google Translate API key deleted' },
   'deepl.apiKeySaved': { ja: 'DeepL API キーを保存しました', en: 'DeepL API key saved' },

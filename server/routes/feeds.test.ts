@@ -108,7 +108,7 @@ describe('GET /api/discover-title', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /api/feeds — RSS discovery pipeline', () => {
-  it('skips RSS bridge and CSS selector when rss_url is found', async () => {
+  it('sends choice_needed when rss_url is found', async () => {
     mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed.xml', title: 'Blog' })
 
     const res = await app.inject({
@@ -119,13 +119,38 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     })
 
     const events = parseSSE(res.body)
-    const rssBridge = events.find(e => e.step === 'rss-bridge')
-    const cssSelector = events.find(e => e.step === 'css-selector')
-    expect(rssBridge?.status).toBe('skipped')
-    expect(cssSelector?.status).toBe('skipped')
+    const choice = events.find(e => e.type === 'choice_needed') as any
+    expect(choice).toBeDefined()
+    expect(choice.rss_url).toBe('https://example.com/feed.xml')
+    expect(choice.rss_title).toBe('Blog')
 
+    // Should not create a feed or proceed to further steps
+    expect(events.find(e => e.type === 'done')).toBeUndefined()
     expect(mockQueryRssBridge).not.toHaveBeenCalled()
     expect(mockInferCssSelectorBridge).not.toHaveBeenCalled()
+  })
+
+  it('creates feed directly when discovered_rss_url is provided (Phase 2: whole site)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/feeds',
+      headers: json,
+      payload: {
+        url: 'https://example.com',
+        discovered_rss_url: 'https://example.com/feed.xml',
+        discovered_rss_title: 'Blog',
+      },
+    })
+
+    const events = parseSSE(res.body)
+    const done = events.find(e => e.type === 'done') as any
+    expect(done).toBeDefined()
+    expect(done.feed.rss_url).toBe('https://example.com/feed.xml')
+    expect(done.feed.name).toBe('Blog')
+
+    // Should not run discovery or bridge
+    expect(mockDiscoverRssUrl).not.toHaveBeenCalled()
+    expect(mockQueryRssBridge).not.toHaveBeenCalled()
   })
 
   it('falls back to RSS bridge when discovery fails', async () => {
@@ -170,14 +195,15 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     expect(done.feed.rss_bridge_url).toBe('https://bridge.example.com/css-bridge')
   })
 
-  it('uses hostname as feed name when no name and no title', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://unnamed.example.com/feed', title: null })
-
+  it('uses hostname as feed name when no name and no title (Phase 2)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/feeds',
       headers: json,
-      payload: { url: 'https://unnamed.example.com/blog' },
+      payload: {
+        url: 'https://unnamed.example.com/blog',
+        discovered_rss_url: 'https://unnamed.example.com/feed',
+      },
     })
 
     const events = parseSSE(res.body)
@@ -185,14 +211,16 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     expect(done.feed.name).toBe('unnamed.example.com')
   })
 
-  it('uses discovered title as feed name when no name provided', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Discovered Title' })
-
+  it('uses discovered_rss_title as feed name when no name provided (Phase 2)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/feeds',
       headers: json,
-      payload: { url: 'https://example.com' },
+      payload: {
+        url: 'https://example.com',
+        discovered_rss_url: 'https://example.com/feed',
+        discovered_rss_title: 'Discovered Title',
+      },
     })
 
     const events = parseSSE(res.body)
@@ -200,14 +228,17 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     expect(done.feed.name).toBe('Discovered Title')
   })
 
-  it('prefers explicit name over discovered title', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Discovered' })
-
+  it('prefers explicit name over discovered_rss_title (Phase 2)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/feeds',
       headers: json,
-      payload: { url: 'https://example.com', name: 'Custom Name' },
+      payload: {
+        url: 'https://example.com',
+        name: 'Custom Name',
+        discovered_rss_url: 'https://example.com/feed',
+        discovered_rss_title: 'Discovered',
+      },
     })
 
     const events = parseSSE(res.body)
@@ -257,14 +288,16 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     expect(res.statusCode).toBe(400)
   })
 
-  it('fires fetchSingleFeed for feeds with rss_url', async () => {
-    mockDiscoverRssUrl.mockResolvedValue({ rssUrl: 'https://example.com/feed', title: 'Blog' })
-
+  it('fires fetchSingleFeed for feeds with rss_url (Phase 2)', async () => {
     await app.inject({
       method: 'POST',
       url: '/api/feeds',
       headers: json,
-      payload: { url: 'https://example.com' },
+      payload: {
+        url: 'https://example.com',
+        discovered_rss_url: 'https://example.com/feed',
+        discovered_rss_title: 'Blog',
+      },
     })
 
     // fetchSingleFeed is fire-and-forget, give it a tick

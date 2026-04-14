@@ -75,12 +75,17 @@ describe('GET /api/feeds', () => {
 })
 
 describe('POST /api/feeds', () => {
-  it('creates a feed via SSE', async () => {
+  it('creates a feed via SSE (Phase 2: discovered_rss_url)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/feeds',
       headers: json,
-      payload: { url: 'https://blog.example.com', name: 'My Blog' },
+      payload: {
+        url: 'https://blog.example.com',
+        name: 'My Blog',
+        discovered_rss_url: 'https://blog.example.com/rss',
+        discovered_rss_title: 'My Blog',
+      },
     })
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-type']).toBe('text/event-stream')

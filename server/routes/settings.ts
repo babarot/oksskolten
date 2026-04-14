@@ -51,6 +51,7 @@ const PREF_KEYS = [
   'translate.target_lang',
   'ollama.base_url',
   'ollama.custom_headers',
+  'vllm.base_url',
   'custom_themes',
   'retention.enabled',
   'retention.read_days',
@@ -75,15 +76,16 @@ const PREF_ALLOWED: Record<PrefKey, string[] | null> = {
   'appearance.highlight_theme': null,
   'appearance.font_family': null,
   'appearance.list_layout': ['list', 'card', 'magazine', 'compact'],
-  'chat.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama'],
+  'chat.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm'],
   'chat.model': getAllModelValues(),
-  'summary.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama'],
+  'summary.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm'],
   'summary.model': getAllModelValues(),
-  'translate.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'google-translate', 'deepl'],
+  'translate.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm', 'google-translate', 'deepl'],
   'translate.model': getAllModelValues(),
   'translate.target_lang': ['ja', 'en'],
   'ollama.base_url': null,
   'ollama.custom_headers': null,
+  'vllm.base_url': null,
   'custom_themes': null,
   'retention.enabled': ['on', 'off'],
   'retention.read_days': null,
@@ -101,8 +103,8 @@ function validateProviderModel(body: Record<string, unknown>): string | null {
     const model = body[modelKey] !== undefined ? String(body[modelKey]) : getSetting(modelKey)
     const provider = body[providerKey] !== undefined ? String(body[providerKey]) : getSetting(providerKey)
     if (!model || !provider) continue
-    // google-translate, deepl, and ollama have no static model list
-    if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama') continue
+    // google-translate, deepl, ollama, and vllm have no static model list
+    if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama' || provider === 'vllm') continue
     // claude-code uses anthropic model IDs
     const effectiveProvider = provider === 'claude-code' ? 'anthropic' : provider
     const allowedModels = getModelValues(effectiveProvider)
@@ -216,18 +218,19 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
       }
       const allowed = PREF_ALLOWED[key]
       if (allowed && !allowed.includes(value)) {
-        // Skip static model list check when provider is ollama (dynamic models)
+        // Skip static model list check when provider is ollama or vllm (dynamic models)
         const modelKeyPair = PROVIDER_MODEL_PAIRS.find(p => p.modelKey === key)
         if (modelKeyPair) {
           const provider = body[modelKeyPair.providerKey] !== undefined
             ? String(body[modelKeyPair.providerKey])
             : getSetting(modelKeyPair.providerKey)
-          if (provider === 'ollama') {
+          if (provider === 'ollama' || provider === 'vllm') {
             upsertSetting(key, value)
             updated = true
             continue
           }
         }
+
         reply.status(400).send({ error: `Invalid value for ${key}` })
         return
       }
@@ -555,6 +558,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     anthropic: 'api_key.anthropic',
     gemini: 'api_key.gemini',
     openai: 'api_key.openai',
+    vllm: 'api_key.vllm',
     'google-translate': 'api_key.google_translate',
     deepl: 'api_key.deepl',
   }
@@ -640,6 +644,52 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
         ok: true,
         version: versionData.version || 'unknown',
         model_count: tagsData.models?.length || 0,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Connection failed'
+      reply.send({ ok: false, error: message })
+    }
+  })
+
+  // --- vLLM endpoints ---
+
+  async function vllmFetch(path: string): Promise<Response> {
+    const { getVllmBaseUrl, getVllmApiKey } = await import('../providers/llm/vllm.js')
+    const baseUrl = getVllmBaseUrl().replace(/\/+$/, '')
+    const apiKey = getVllmApiKey()
+    const headers: Record<string, string> = {}
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+    return fetch(`${baseUrl}${path}`, { headers, signal: AbortSignal.timeout(5_000) })
+  }
+
+  api.get('/api/settings/vllm/models', async (_request, reply) => {
+    try {
+      const res = await vllmFetch('/v1/models')
+      if (!res.ok) {
+        reply.send({ models: [] })
+        return
+      }
+      const data = await res.json() as { data?: Array<{ id: string }> }
+      const models = (data.data || []).map(m => ({
+        name: m.id,
+      }))
+      reply.send({ models })
+    } catch {
+      reply.send({ models: [] })
+    }
+  })
+
+  api.get('/api/settings/vllm/status', async (_request, reply) => {
+    try {
+      const res = await vllmFetch('/v1/models')
+      if (!res.ok) {
+        reply.send({ ok: false, error: `HTTP ${res.status}` })
+        return
+      }
+      const data = await res.json() as { data?: unknown[] }
+      reply.send({
+        ok: true,
+        model_count: data.data?.length || 0,
       })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Connection failed'

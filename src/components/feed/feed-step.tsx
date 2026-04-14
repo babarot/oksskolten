@@ -14,6 +14,7 @@ type TranslateFn = ReturnType<typeof useI18n>['t']
 /** Map raw server error messages to i18n keys so they render in the user's locale. */
 function localizeServerError(raw: string, t: TranslateFn): string {
   if (raw.includes('RSS could not be detected')) return t('modal.errorRssNotDetected')
+  if (raw.includes('Could not extract content')) return t('modal.errorPageExtract')
   if (raw.includes('already exists')) return t('modal.errorAlreadyExists')
   if (raw.includes('https://')) return t('modal.errorHttpsOnly')
   return raw || t('modal.genericError')
@@ -125,6 +126,7 @@ export function FeedStep({ onClose, onCreated, onFetchStarted, categories }: Fee
 
   const [addingSteps, setAddingSteps] = useState<Record<StepName, StepState> | null>(null)
   const [addingDone, setAddingDone] = useState(false)
+  const [choiceNeeded, setChoiceNeeded] = useState<{ rss_url: string; rss_title: string | null } | null>(null)
 
   useEffect(() => {
     const trimmed = url.trim()
@@ -161,11 +163,12 @@ export function FeedStep({ onClose, onCreated, onFetchStarted, categories }: Fee
     }
   }, [url, nameManuallySet])
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSubmit(e?: React.FormEvent, phase2?: Record<string, unknown>) {
+    e?.preventDefault()
     if (!url.trim()) return
     setError('')
     setLoading(true)
+    setChoiceNeeded(null)
 
     const initSteps: Record<StepName, StepState> = {
       'rss-discovery': { status: 'pending' },
@@ -184,6 +187,7 @@ export function FeedStep({ onClose, onCreated, onFetchStarted, categories }: Fee
           name: name.trim() || undefined,
           url: url.trim(),
           category_id: categoryId || null,
+          ...phase2,
         }),
       })
 
@@ -231,6 +235,13 @@ export function FeedStep({ onClose, onCreated, onFetchStarted, categories }: Fee
               ...prev,
               [stepName]: { status, found },
             } : prev)
+          } else if (payload.type === 'choice_needed') {
+            setChoiceNeeded({
+              rss_url: payload.rss_url as string,
+              rss_title: (payload.rss_title as string | null) ?? null,
+            })
+            setAddingSteps(null)
+            setLoading(false)
           } else if (payload.type === 'done') {
             setAddingDone(true)
             const feed = payload.feed as { id: number; rss_url: string | null; rss_bridge_url: string | null }
@@ -250,6 +261,35 @@ export function FeedStep({ onClose, onCreated, onFetchStarted, categories }: Fee
       setError(localizeServerError(raw, t))
       setLoading(false)
     }
+  }
+
+  if (choiceNeeded) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-text">{t('modal.choiceTitle')}</p>
+        {choiceNeeded.rss_title && (
+          <p className="text-sm text-muted truncate">&ldquo;{choiceNeeded.rss_title}&rdquo;</p>
+        )}
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            onClick={() => handleSubmit(undefined, {
+              discovered_rss_url: choiceNeeded.rss_url,
+              discovered_rss_title: choiceNeeded.rss_title ?? undefined,
+            })}
+          >
+            {t('modal.choiceWholeSite')}
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => handleSubmit(undefined, { force_page_selector: true })}
+          >
+            {t('modal.choiceThisPage')}
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (addingSteps) {

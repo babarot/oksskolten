@@ -43,10 +43,20 @@ function jsonSchemaToZod(
       case 'boolean':
         zodType = z.boolean()
         break
+      case 'array':
+        if (prop.items?.type === 'number') {
+          zodType = z.array(z.number())
+        } else if (prop.items?.type === 'string') {
+          zodType = z.array(z.string())
+        } else {
+          throw new Error(`Unsupported array item type: ${prop.items?.type}`)
+        }
+        break
       case 'string':
-      default:
         zodType = z.string()
         break
+      default:
+        throw new Error(`Unsupported type: ${prop.type}`)
     }
 
     if (prop.description) {
