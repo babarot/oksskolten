@@ -67,8 +67,10 @@ export function useRewriteInternalLinks(
 
     setRewriting(true)
 
-    // Send canonical URLs
-    const urls = [...candidates.keys()]
+    // Send canonical URLs; DB stores https:// URLs
+    const urls = [...candidates.keys()].map((u) =>
+      u.replace(/^http:\/\//, 'https://'),
+    )
 
     apiPost('/api/articles/check-urls', { urls })
       .then((data: { existing: string[] }) => {
@@ -76,8 +78,9 @@ export function useRewriteInternalLinks(
 
         const existingSet = new Set(data.existing)
         for (const [canonical, elements] of candidates) {
-          if (existingSet.has(canonical)) {
-            const internalPath = articleUrlToPath(canonical)
+          const httpsCanonical = canonical.replace(/^http:\/\//, 'https://')
+          if (existingSet.has(httpsCanonical)) {
+            const internalPath = articleUrlToPath(httpsCanonical)
             for (const el of elements) {
               el.setAttribute('href', internalPath)
               el.setAttribute('data-internal-link', 'true')
