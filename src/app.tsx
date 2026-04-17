@@ -221,12 +221,21 @@ function ArticleDetailPage() {
 
   if (!splat) return null
 
+  let rawSplat = splat
   if (splat.endsWith('.md')) {
-    const articleUrl = `https://${decodeURIComponent(splat.slice(0, -3))}`
-    return <ArticleRawPage articleUrl={articleUrl} />
+    rawSplat = splat.slice(0, -3)
   }
 
-  const articleUrl = `https://${decodeURIComponent(splat)}`
+  let articleUrl = ''
+  if (rawSplat.startsWith('http/')) {
+    articleUrl = `http://${decodeURIComponent(rawSplat.slice(5))}`
+  } else {
+    articleUrl = `https://${decodeURIComponent(rawSplat)}`
+  }
+
+  if (splat.endsWith('.md')) {
+    return <ArticleRawPage articleUrl={articleUrl} />
+  }
 
   return (
     <>

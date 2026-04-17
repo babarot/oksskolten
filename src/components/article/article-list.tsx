@@ -13,6 +13,7 @@ import { useAppLayout } from '../../app'
 import { ArticleCard, type ArticleDisplayConfig } from './article-card'
 import { FeedMetricsBar } from '../feed/feed-metrics-bar'
 import { SwipeableArticleCard } from './swipeable-article-card'
+import { articleUrlToPath } from '../../lib/url'
 import { ArticleOverlay } from './article-overlay'
 import { PullToRefresh } from '../layout/pull-to-refresh'
 import { useFetchProgressContext } from '../../contexts/fetch-progress-context'
@@ -147,15 +148,13 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const isOverlayMode = articleOpenMode === 'overlay'
 
   useEffect(() => {
-    setNavigateToArticle((id: string) => {
+    setNavigateToArticle(() => (id: string) => {
       const article = articleMap.get(id)
       if (!article) return
       if (isOverlayMode) {
         setOverlayUrl(article.url)
       } else {
-        // The /:url route in app.tsx already prepends https:// to the splat
-        const urlWithoutProtocol = article.url.replace(/^https?:\/\//, '')
-        void navigate(`/${encodeURIComponent(urlWithoutProtocol)}`)
+        void navigate(articleUrlToPath(article.url))
       }
     })
   }, [articleMap, isOverlayMode, navigate, setNavigateToArticle])
@@ -179,8 +178,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
       // Page mode: Enter to navigate
       const article = articleMap.get(id)
       if (article) {
-        const urlWithoutProtocol = article.url.replace(/^https?:\/\//, '')
-        void navigate(`/${encodeURIComponent(urlWithoutProtocol)}`)
+        void navigate(articleUrlToPath(article.url))
       }
     },
     onEscape: () => {

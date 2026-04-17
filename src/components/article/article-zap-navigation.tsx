@@ -4,6 +4,8 @@ import { useKeyboardNavigationContext } from '../../contexts/keyboard-navigation
 import { useKeyboardNavigation } from '../../hooks/use-keyboard-navigation'
 import { useAppLayout } from '../../app'
 
+import { articleUrlToPath } from '../../lib/url'
+
 interface ArticleZapNavigationProps {
   currentArticleId: string
   onBookmarkToggle?: () => void
@@ -22,16 +24,9 @@ export function ArticleZapNavigation({ currentArticleId, onBookmarkToggle, onOpe
     focusedItemId: currentArticleId,
     onFocusChange: (id) => {
       setFocusedItemId(id)
-      
-      // If we have the URL in our persisted map, use it to navigate
       const url = articleUrls[id]
-      if (url) {
-        if (isOverlayMode) {
-          navigateToArticle(id)
-        } else {
-          const urlWithoutProtocol = url.replace(/^https?:\/\//, '')
-          void navigate(`/${encodeURIComponent(urlWithoutProtocol)}`)
-        }
+      if (url && !isOverlayMode) {
+        void navigate(articleUrlToPath(url))
       } else {
         navigateToArticle(id)
       }

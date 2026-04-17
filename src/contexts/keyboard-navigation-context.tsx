@@ -32,7 +32,7 @@ export function KeyboardNavigationProvider({ children }: { children: ReactNode }
       return saved ? JSON.parse(saved) : {}
     } catch { return {} }
   })
-  const [navigateToArticle, setNavigateToArticle] = useState<(id: string) => void>(() => {})
+  const [navigateToArticle, setNavigateToArticle] = useState<(id: string) => void>(() => () => {})
 
   const setLastListUrl = useCallback((url: string | null) => {
     setLastListUrlState(url)
