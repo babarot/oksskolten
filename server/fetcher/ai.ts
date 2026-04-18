@@ -72,16 +72,24 @@ async function runAiTask(
   const provider = getProvider(providerName)
   provider.requireKey()
   const prompt = config.buildPrompt(fullText)
-  const result = onText
-    ? await provider.streamMessage(
-        { model, maxTokens: config.maxTokens, messages: [{ role: 'user', content: prompt }] },
-        onText,
-      )
-    : await provider.createMessage({
-        model,
-        maxTokens: config.maxTokens,
-        messages: [{ role: 'user', content: prompt }],
-      })
+  let result: Awaited<ReturnType<typeof provider.createMessage>>
+  try {
+    result = onText
+      ? await provider.streamMessage(
+          { model, maxTokens: config.maxTokens, messages: [{ role: 'user', content: prompt }] },
+          onText,
+        )
+      : await provider.createMessage({
+          model,
+          maxTokens: config.maxTokens,
+          messages: [{ role: 'user', content: prompt }],
+        })
+  } catch (err) {
+    const status = (err as { status?: number }).status
+    if (status === 429) throw new Error('AI_QUOTA_EXCEEDED')
+    if (status === 503) throw new Error('AI_OVERLOADED')
+    throw err
+  }
   return {
     text: result.text,
     inputTokens: result.inputTokens,

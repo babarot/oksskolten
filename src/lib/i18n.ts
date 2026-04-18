@@ -756,6 +756,14 @@ const dict = {
     ja: '要約に失敗しました。しばらくしてから再度お試しください。',
     en: 'Summarization failed. Please try again later.',
   },
+  'error.aiQuotaExceeded': {
+    ja: '本日の無料枠の上限に達しました。明日以降に再度お試しください。',
+    en: 'Free tier daily quota exceeded. Please try again tomorrow.',
+  },
+  'error.aiOverloaded': {
+    ja: 'AIサービスが一時的に混雑しています。しばらくしてから再度お試しください。',
+    en: 'AI service is temporarily overloaded. Please try again in a moment.',
+  },
   'error.translationFailed': {
     ja: '翻訳に失敗しました。しばらくしてから再度お試しください。',
     en: 'Translation failed. Please try again later.',
@@ -808,6 +816,8 @@ const errorCodeMap: Record<string, MessageKey> = {
   DEEPL_KEY_NOT_SET: 'error.deeplKeyNotSet',
   SUMMARIZATION_FAILED: 'error.summarizationFailed',
   TRANSLATION_FAILED: 'error.translationFailed',
+  AI_QUOTA_EXCEEDED: 'error.aiQuotaExceeded',
+  AI_OVERLOADED: 'error.aiOverloaded',
 }
 
 interface LocaleContextValue {

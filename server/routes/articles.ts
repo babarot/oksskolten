@@ -119,6 +119,8 @@ const KNOWN_ERROR_CODES = new Set([
   'DEEPL_KEY_NOT_SET',
   'SUMMARIZATION_FAILED',
   'TRANSLATION_FAILED',
+  'AI_QUOTA_EXCEEDED',
+  'AI_OVERLOADED',
 ])
 
 function extractKnownErrorCode(err: unknown): string | null {
