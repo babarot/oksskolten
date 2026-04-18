@@ -117,6 +117,36 @@ export interface FetchFullTextOptions {
   requiresJsChallenge?: boolean
 }
 
+/** Maximum number of paginated pages to follow (safety cap). */
+const MAX_PAGINATION_PAGES = 10
+
+/**
+ * Extract the URL of the next paginated page from raw HTML.
+ * Supports standard `<link rel="next">` and common `class="next"` pagination links.
+ */
+export function extractNextPageUrl(html: string, currentUrl: string): string | null {
+  // Standard: <link rel="next" href="...">
+  const linkRel = html.match(/<link[^>]+rel=["']next["'][^>]*href=["']([^"']+)["']/i)
+    ?? html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']next["']/i)
+  if (linkRel) {
+    try {
+      const next = new URL(linkRel[1], currentUrl).href
+      if (next !== currentUrl) return next
+    } catch { /* invalid URL */ }
+  }
+
+  // Common pattern: <[tag] class="...next..."><a href="...">
+  const nextEl = html.match(/<[a-z]+[^>]+class=["'][^"']*\bnext\b[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"'#][^"']*?)["']/i)
+  if (nextEl) {
+    try {
+      const next = new URL(nextEl[1], currentUrl).href
+      if (next !== currentUrl) return next
+    } catch { /* invalid URL */ }
+  }
+
+  return null
+}
+
 export async function fetchFullText(articleUrl: string, options?: FetchFullTextOptions): Promise<ParseHtmlResult> {
   const cleanerConfig = options?.cleanerConfig
   const requiresJsChallenge = options?.requiresJsChallenge ?? false
@@ -146,6 +176,23 @@ export async function fetchFullText(articleUrl: string, options?: FetchFullTextO
         return flareResult
       }
     }
+  }
+
+  // Step 4: Follow pagination links and concatenate remaining pages
+  const fullTexts = [result.fullText]
+  let nextUrl = extractNextPageUrl(html, articleUrl)
+  let pageCount = 1
+  while (nextUrl && pageCount < MAX_PAGINATION_PAGES) {
+    const { html: pageHtml } = await fetchHtml(nextUrl, { useFlareSolverr: requiresJsChallenge })
+    const pageInput: ParseHtmlInput = { html: stripHeavyTags(pageHtml), articleUrl: nextUrl, cleanerConfig }
+    const pageResult: ParseHtmlResult = await pool.run(pageInput, { signal: AbortSignal.timeout(WORKER_TIMEOUT_MS) })
+    if (pageResult.fullText.trim()) fullTexts.push(pageResult.fullText)
+    nextUrl = extractNextPageUrl(pageHtml, nextUrl)
+    pageCount++
+  }
+
+  if (fullTexts.length > 1) {
+    result.fullText = fullTexts.join('\n\n')
   }
 
   return result

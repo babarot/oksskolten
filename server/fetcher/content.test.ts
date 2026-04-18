@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { parseHtml } from './contentWorker.js'
-import { extractAnchoredContentHtml, isBotBlockPage, stripHeavyTags } from './content.js'
+import { extractAnchoredContentHtml, extractNextPageUrl, isBotBlockPage, stripHeavyTags } from './content.js'
 
 // ---------------------------------------------------------------------------
 // Mocks — these mock modules used by contentWorker.ts (parseHtml)
@@ -386,6 +386,47 @@ describe('stripHeavyTags', () => {
     expect(stripped).not.toContain('Nav')
     expect(stripped).not.toContain('Aside')
     expect(stripped).not.toContain('Footer')
+  })
+})
+
+describe('extractNextPageUrl', () => {
+  const base = 'https://example.com/articles/-/123'
+
+  it('returns null when no pagination', () => {
+    expect(extractNextPageUrl('<div><p>Content</p></div>', base)).toBeNull()
+  })
+
+  it('extracts <link rel="next"> (standard)', () => {
+    const html = '<head><link rel="next" href="/articles/-/123?page=2"></head>'
+    expect(extractNextPageUrl(html, base)).toBe('https://example.com/articles/-/123?page=2')
+  })
+
+  it('extracts <link href="..." rel="next"> (attribute order reversed)', () => {
+    const html = '<head><link href="/articles/-/123?page=2" rel="next"></head>'
+    expect(extractNextPageUrl(html, base)).toBe('https://example.com/articles/-/123?page=2')
+  })
+
+  it('extracts class="next" pagination link (toyokeizai style)', () => {
+    const html = `<div class="pagination">
+      <span class="current">1</span>
+      <span class="next"><a href="/articles/-/123?page=2"><span>→</span></a></span>
+    </div>`
+    expect(extractNextPageUrl(html, base)).toBe('https://example.com/articles/-/123?page=2')
+  })
+
+  it('resolves relative URLs against base', () => {
+    const html = '<span class="next"><a href="?page=3">→</a></span>'
+    expect(extractNextPageUrl(html, 'https://example.com/articles/-/123?page=2')).toBe('https://example.com/articles/-/123?page=3')
+  })
+
+  it('returns null for anchor-only href (#)', () => {
+    const html = '<span class="next"><a href="#top">→</a></span>'
+    expect(extractNextPageUrl(html, base)).toBeNull()
+  })
+
+  it('returns null when next URL equals current URL', () => {
+    const html = '<span class="next"><a href="/articles/-/123">→</a></span>'
+    expect(extractNextPageUrl(html, base)).toBeNull()
   })
 })
 
