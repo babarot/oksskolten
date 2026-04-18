@@ -109,7 +109,7 @@ app.addHook('onResponse', (req, reply, done) => {
 app.addHook('onRequest', (_req, reply, done) => {
   reply.header('X-Frame-Options', 'DENY')
   reply.header('X-Content-Type-Options', 'nosniff')
-  reply.header('Referrer-Policy', 'no-referrer')
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
   reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: http: data:; connect-src 'self'; frame-ancestors 'none'")
   done()
 })

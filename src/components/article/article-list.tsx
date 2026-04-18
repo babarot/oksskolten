@@ -119,24 +119,10 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   // ---------------------------------------------------------------------------
   // Keyboard navigation
   // ---------------------------------------------------------------------------
-  const { focusedItemId, setFocusedItemId, setArticleIds, setArticleUrls, setNavigateToArticle, setLastListUrl } = useKeyboardNavigationContext()
+  const { focusedItemId, setFocusedItemId } = useKeyboardNavigationContext()
   const isKeyboardNavEnabled = keyboardNavigation === 'on' && !isGridLayout
 
   const articleIds = useMemo(() => articles.map(a => String(a.id)), [articles])
-  const articleUrls = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const a of articles) map[String(a.id)] = a.url
-    return map
-  }, [articles])
-
-  useEffect(() => {
-    setArticleIds(articleIds)
-    setArticleUrls(articleUrls)
-  }, [articleIds, articleUrls, setArticleIds, setArticleUrls])
-
-  useEffect(() => {
-    setLastListUrl(location.pathname)
-  }, [location.pathname, setLastListUrl])
 
   const articleMap = useMemo(() => {
     const map = new Map<string, ArticleListItem>()
@@ -145,18 +131,6 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   }, [articles])
 
   const isOverlayMode = articleOpenMode === 'overlay'
-
-  useEffect(() => {
-    setNavigateToArticle(() => (id: string) => {
-      const article = articleMap.get(id)
-      if (!article) return
-      if (isOverlayMode) {
-        setOverlayUrl(article.url)
-      } else {
-        void navigate(articleUrlToPath(article.url))
-      }
-    })
-  }, [articleMap, isOverlayMode, navigate, setNavigateToArticle])
   // Short debounce after overlay close to prevent Escape from immediately clearing focus
   const escapeDebounceRef = useRef(false)
 
@@ -176,9 +150,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     onEnter: isOverlayMode ? undefined : (id) => {
       // Page mode: Enter to navigate
       const article = articleMap.get(id)
-      if (article) {
-        void navigate(articleUrlToPath(article.url))
-      }
+      if (article) void navigate(`/${encodeURIComponent(article.url)}`)
     },
     onEscape: () => {
       if (escapeDebounceRef.current) return
