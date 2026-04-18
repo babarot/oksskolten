@@ -86,7 +86,7 @@ export function useSettings() {
   const [translateTargetLang, setTranslateTargetLangState] = useState<string | null>(null)
 
   // --- DB sync ---
-  const { data: prefs } = useSWR<Prefs>(
+  const { data: prefs, mutate: mutatePrefs } = useSWR<Prefs>(
     '/api/settings/preferences',
     fetcher,
     { revalidateOnFocus: false, revalidateOnReconnect: false },
@@ -213,14 +213,20 @@ export function useSettings() {
     const patch = { ...pendingRef.current }
     pendingRef.current = {}
     if (Object.keys(patch).length > 0) {
+      const keys = Object.keys(patch)
       fetch('/api/settings/preferences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(patch),
         keepalive: true,
-      }).catch(() => {})
+      })
+        .then(() => {
+          for (const key of keys) dirtyKeysRef.current.delete(key)
+          if (prefs) void mutatePrefs({ ...prefs, ...patch }, false)
+        })
+        .catch(() => {})
     }
-  }, [])
+  }, [prefs, mutatePrefs])
 
   // Debounced save: 500ms after last change
   const scheduleSave = useCallback(() => {
@@ -230,10 +236,16 @@ export function useSettings() {
       const patch = { ...pendingRef.current }
       pendingRef.current = {}
       if (Object.keys(patch).length > 0) {
-        apiPatch('/api/settings/preferences', patch).catch(() => {})
+        const keys = Object.keys(patch)
+        apiPatch('/api/settings/preferences', patch)
+          .then(() => {
+            for (const key of keys) dirtyKeysRef.current.delete(key)
+            if (prefs) void mutatePrefs({ ...prefs, ...patch }, false)
+          })
+          .catch(() => {})
       }
     }, SETTINGS_SYNC_DEBOUNCE_MS)
-  }, [])
+  }, [prefs, mutatePrefs])
 
   // Flush on beforeunload + unmount
   useEffect(() => {
@@ -264,6 +276,7 @@ export function useSettings() {
     syncedSetArticleFont,
     syncedSetMascot,
     syncedSetKeyboardNavigation,
+    syncedSetKeybindings,
     syncedSetChatProvider,
     syncedSetChatModel,
     syncedSetSummaryProvider,
@@ -293,6 +306,12 @@ export function useSettings() {
       syncedSetArticleFont: make<string>('appearance.font_family', setArticleFont),
       syncedSetMascot: make<MascotChoice>('appearance.mascot', setMascot),
       syncedSetKeyboardNavigation: make<'on' | 'off'>('reading.keyboard_navigation', setKeyboardNavigation),
+      syncedSetKeybindings: (value: import('./use-keyboard-navigation').KeyBindings) => {
+        dirtyKeysRef.current.add('reading.keybindings')
+        setKeybindings(value)
+        pendingRef.current['reading.keybindings'] = JSON.stringify(value)
+        scheduleSaveRef.current()
+      },
       syncedSetChatProvider: make<string>('chat.provider', setChatProviderState),
       syncedSetChatModel: make<string>('chat.model', setChatModelState),
       syncedSetSummaryProvider: make<string>('summary.provider', setSummaryProviderState),
@@ -304,14 +323,6 @@ export function useSettings() {
     // scheduleSave and dirtyKeysRef are stable refs; remaining setters are useState/useCallback-stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setDateMode, setAutoMarkRead, setShowUnreadIndicator, setInternalLinks, setShowThumbnails, setShowFeedActivity, setChatPosition, setArticleOpenMode, setCategoryUnreadOnly, setLayout, setArticleFont, setMascot])
-
-  // Special: keybindings setter serializes to JSON
-  const syncedSetKeybindings = useCallback((value: import('./use-keyboard-navigation').KeyBindings) => {
-    dirtyKeysRef.current.add('reading.keybindings')
-    setKeybindings(value)
-    pendingRef.current['reading.keybindings'] = JSON.stringify(value)
-    scheduleSave()
-  }, [setKeybindings, scheduleSave])
 
   // Special: theme setter updates 2 keys + resets highlight
   const syncedSetTheme = useCallback((name: string) => {

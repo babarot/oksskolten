@@ -67,7 +67,12 @@ export function useKeyboardNavigation(options: UseKeyboardNavigationOptions) {
 
         const currentIndex = items.indexOf(focusedItemId)
         if (currentIndex === -1) {
-          onFocusChange(items[0])
+          // If not in list, j goes to first, k goes to last (or vice versa)
+          if (key === bindings.next) {
+            onFocusChange(items[0])
+          } else {
+            onFocusChange(items[items.length - 1])
+          }
           return
         }
 
