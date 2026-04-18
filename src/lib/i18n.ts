@@ -764,6 +764,10 @@ const dict = {
     ja: 'AIサービスが一時的に混雑しています。しばらくしてから再度お試しください。',
     en: 'AI service is temporarily overloaded. Please try again in a moment.',
   },
+  'error.aiTruncated': {
+    ja: '要約の生成が途中で打ち切られました。再度お試しください。',
+    en: 'Summary generation was cut off. Please try again.',
+  },
   'error.translationFailed': {
     ja: '翻訳に失敗しました。しばらくしてから再度お試しください。',
     en: 'Translation failed. Please try again later.',
@@ -818,6 +822,7 @@ const errorCodeMap: Record<string, MessageKey> = {
   TRANSLATION_FAILED: 'error.translationFailed',
   AI_QUOTA_EXCEEDED: 'error.aiQuotaExceeded',
   AI_OVERLOADED: 'error.aiOverloaded',
+  AI_TRUNCATED: 'error.aiTruncated',
 }
 
 interface LocaleContextValue {

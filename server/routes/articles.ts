@@ -121,6 +121,7 @@ const KNOWN_ERROR_CODES = new Set([
   'TRANSLATION_FAILED',
   'AI_QUOTA_EXCEEDED',
   'AI_OVERLOADED',
+  'AI_TRUNCATED',
 ])
 
 function extractKnownErrorCode(err: unknown): string | null {

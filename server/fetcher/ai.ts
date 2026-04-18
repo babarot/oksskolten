@@ -99,7 +99,9 @@ async function runAiTask(
   }
 }
 
-const SUMMARIZE_MAX_TOKENS = 2048
+// gemini-2.5-flash counts thinking tokens against maxOutputTokens;
+// 2048 was exhausted by thinking, leaving ~80 tokens for visible output.
+const SUMMARIZE_MAX_TOKENS = 16384
 const TRANSLATE_MAX_TOKENS = 16384
 
 const summarizeConfig: AiTaskConfig = {

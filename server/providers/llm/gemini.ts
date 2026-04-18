@@ -35,6 +35,10 @@ export const geminiProvider: LLMProvider = {
         ...(params.systemInstruction ? { systemInstruction: params.systemInstruction } : {}),
       },
     })
+    const finishReason = response.candidates?.[0]?.finishReason
+    if (finishReason && finishReason !== 'STOP') {
+      throw new Error(`AI_TRUNCATED`)
+    }
     const text = response.text ?? ''
     return {
       text,
@@ -60,6 +64,7 @@ export const geminiProvider: LLMProvider = {
     let fullText = ''
     let inputTokens = 0
     let outputTokens = 0
+    let finishReason = ''
 
     for await (const chunk of stream) {
       const delta = chunk.text ?? ''
@@ -67,10 +72,16 @@ export const geminiProvider: LLMProvider = {
         fullText += delta
         onText(delta)
       }
+      const chunkFinishReason = chunk.candidates?.[0]?.finishReason
+      if (chunkFinishReason) finishReason = chunkFinishReason
       if (chunk.usageMetadata) {
         inputTokens = chunk.usageMetadata.promptTokenCount ?? inputTokens
         outputTokens = chunk.usageMetadata.candidatesTokenCount ?? outputTokens
       }
+    }
+
+    if (finishReason && finishReason !== 'STOP') {
+      throw new Error(`AI_TRUNCATED`)
     }
 
     return { text: fullText, inputTokens, outputTokens }
