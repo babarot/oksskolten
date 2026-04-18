@@ -1,4 +1,4 @@
-.PHONY: help ci test test-server test-client typecheck lint lint-docs build-demo dev dev-down dev-scratch prod prod-down
+.PHONY: help ci test test-server test-client typecheck lint lint-docs build-demo dev dev-down dev-scratch prod prod-down prod-setup
 
 COMPOSE ?= docker compose
 
@@ -74,6 +74,17 @@ dev-scratch: ## Rebuild dev from scratch (removes volumes)
 # ---------------------------------------------------------------------------
 
 PROD_COMPOSE = DATA_DIR=./data-prod $(COMPOSE) -p oksskolten-prod -f compose.yaml -f compose.prod.yaml
+
+prod-setup: ## One-time setup: create data-prod dir (with correct ownership) and .env
+	@mkdir -p ./data-prod
+	@sudo chown 999:999 ./data-prod
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		printf "MEILI_MASTER_KEY=%s\n" "$$(openssl rand -base64 32)" >> .env; \
+		echo ".env created with generated MEILI_MASTER_KEY."; \
+	else \
+		echo ".env already exists, skipping."; \
+	fi
 
 prod: ## Start production environment
 	$(PROD_COMPOSE) up -d --build

@@ -12,9 +12,13 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
     volumes: !override
       - ${DATA_DIR:-./data}:/data
-    ports: !override []
-    expose:
-      - "3000"
+    ports: !override
+      - "3000:3000"
+    depends_on: !override
+      rss-bridge:
+        condition: service_started
+      meilisearch:
+        condition: service_healthy
 
   meilisearch:
     environment:
@@ -26,17 +30,9 @@ services:
     ports: !override []
 
   flaresolverr:
+    profiles: [flaresolverr]
     ports: !override []
 
   frontend:
     deploy:
       replicas: 0
-
-  cloudflared:
-    image: cloudflare/cloudflared
-    command: tunnel run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
-    networks:
-      - internal
-    restart: unless-stopped

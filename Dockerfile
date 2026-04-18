@@ -36,7 +36,7 @@ COPY server ./server
 COPY shared ./shared
 COPY migrations ./migrations
 
-RUN addgroup --system app && adduser --system --ingroup app app \
+RUN groupadd --system --gid 999 app && useradd --system --uid 999 --gid 999 --no-create-home app \
  && mkdir -p /app/data && chown app:app /app/data
 USER app
 
