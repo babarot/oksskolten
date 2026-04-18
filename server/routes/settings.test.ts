@@ -690,6 +690,9 @@ describe('PATCH /api/settings/preferences — retention validation', () => {
 
 describe('vLLM endpoints', () => {
   it('GET /api/settings/vllm/status returns connection failed when unreachable', async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error('fetch failed'))
+    vi.stubGlobal('fetch', mockFetch)
+
     const res = await app.inject({
       method: 'GET',
       url: '/api/settings/vllm/status',
@@ -697,7 +700,9 @@ describe('vLLM endpoints', () => {
     expect(res.statusCode).toBe(200)
     const body = res.json()
     expect(body.ok).toBe(false)
-    expect(body.error).toBeDefined()
+    expect(body.error).toBe('fetch failed')
+
+    vi.unstubAllGlobals()
   })
 
   it('PATCH /api/settings/preferences updates vllm.base_url', async () => {

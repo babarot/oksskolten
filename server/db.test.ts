@@ -246,6 +246,39 @@ describe('Articles', () => {
     expect(article!.url).toBe('https://example.com/%E8%A8%98%E4%BA%8B')
   })
 
+  it('getArticleByUrl handles protocol fallback (https -> http)', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'http://example.com/http-only' })
+
+    const article = getArticleByUrl('https://example.com/http-only')
+    expect(article).toBeDefined()
+    expect(article!.url).toBe('http://example.com/http-only')
+  })
+
+  it('getArticleByUrl handles protocol fallback (http -> https)', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/https-only' })
+
+    const article = getArticleByUrl('http://example.com/https-only')
+    expect(article).toBeDefined()
+    expect(article!.url).toBe('https://example.com/https-only')
+  })
+
+  it('getExistingArticleUrls handles protocol-agnostic lookup', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'http://example.com/article1' })
+    seedArticle(feed.id, { url: 'https://example.com/article2' })
+
+    const existing = getExistingArticleUrls([
+      'https://example.com/article1', // input https, DB has http
+      'http://example.com/article2',  // input http, DB has https
+      'https://example.com/article3', // not in DB
+    ])
+
+    expect(existing.has('https://example.com/article1')).toBe(true)
+    expect(existing.has('http://example.com/article2')).toBe(true)
+    expect(existing.has('https://example.com/article3')).toBe(false)
+  })
 
   describe('getArticles filtering', () => {
     it('filters by feedId', () => {

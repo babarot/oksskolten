@@ -659,7 +659,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     const apiKey = getVllmApiKey()
     const headers: Record<string, string> = {}
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-    return fetch(`${baseUrl}${path}`, { headers, signal: AbortSignal.timeout(5_000) })
+    return fetch(`${baseUrl}${path}`, { headers, signal: AbortSignal.timeout(15_000) })
   }
 
   api.get('/api/settings/vllm/models', async (_request, reply) => {

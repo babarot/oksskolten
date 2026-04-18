@@ -266,7 +266,7 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
     expect(hasErrorOrDone).toBe(true)
   })
 
-  it('rejects http:// URLs', async () => {
+  it('accepts http:// URLs', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/feeds',
@@ -274,7 +274,20 @@ describe('POST /api/feeds — RSS discovery pipeline', () => {
       payload: { url: 'http://example.com/feed' },
     })
 
+    // Now succeeds (validation-wise)
+    expect(res.statusCode).toBe(200)
+  })
+
+  it('rejects ftp:// URLs', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/feeds',
+      headers: json,
+      payload: { url: 'ftp://example.com/feed' },
+    })
+
     expect(res.statusCode).toBe(400)
+    expect(res.json().error).toMatch(/Only http:\/\/ or https:\/\/ URLs are allowed/i)
   })
 
   it('rejects invalid URLs', async () => {
