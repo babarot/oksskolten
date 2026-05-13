@@ -14,6 +14,7 @@ import { ArticleList, type ArticleListHandle } from './components/article/articl
 import { ArticleDetail } from './components/article/article-detail'
 import { ArticleRawPage } from './components/article/article-raw-page'
 import { PageLayout } from './components/layout/page-layout'
+import { KeyboardNavigationProvider } from './contexts/keyboard-navigation-context'
 const SettingsPage = lazy(() => import('./pages/settings-page').then(m => ({ default: m.SettingsPage })))
 const ChatPage = lazy(() => import('./pages/chat-page').then(m => ({ default: m.ChatPage })))
 const HomePage = lazy(() => import('./pages/home-page').then(m => ({ default: m.HomePage })))
@@ -89,7 +90,9 @@ function AppLayout() {
       <TooltipProvider delayDuration={300}>
         <div className="min-h-screen bg-bg text-text">
           <FetchProgressProvider>
-            <Outlet context={{ settings, sidebarOpen, setSidebarOpen }} />
+            <KeyboardNavigationProvider>
+              <Outlet context={{ settings, sidebarOpen, setSidebarOpen }} />
+            </KeyboardNavigationProvider>
           </FetchProgressProvider>
           <Toaster
             theme="system"
@@ -213,19 +216,29 @@ function HomePageWrapper() {
 
 function ArticleDetailPage() {
   const { '*': splat } = useParams()
+  const navigate = useNavigate()
 
   if (!splat) return null
 
+  let rawSplat = splat
   if (splat.endsWith('.md')) {
-    const articleUrl = `https://${decodeURIComponent(splat.slice(0, -3))}`
+    rawSplat = splat.slice(0, -3)
+  }
+
+  let articleUrl = ''
+  if (rawSplat.startsWith('http/')) {
+    articleUrl = `http://${decodeURIComponent(rawSplat.slice(5))}`
+  } else {
+    articleUrl = `https://${decodeURIComponent(rawSplat)}`
+  }
+
+  if (splat.endsWith('.md')) {
     return <ArticleRawPage articleUrl={articleUrl} />
   }
 
-  const articleUrl = `https://${decodeURIComponent(splat)}`
-
   return (
     <>
-      <Header mode="detail" />
+      <Header mode="detail" onBack={() => navigate('/inbox')} />
       <ArticleDetail articleUrl={articleUrl} />
     </>
   )

@@ -27,23 +27,23 @@ import { queryRssBridge, inferCssSelectorBridge } from '../rss-bridge.js'
 import { parseOpml, generateOpml } from '../opml.js'
 import { NumericIdParams, parseOrBadRequest } from '../lib/validation.js'
 
-const httpsUrl = z
+const httpOrHttpsUrl = z
   .string({ error: 'url is required' })
   .min(1, 'url is required')
   .url('must be a valid URL')
-  .refine((u) => u.startsWith('https://'), { message: 'Only https:// URLs are allowed' })
+  .refine((u) => u.startsWith('https://') || u.startsWith('http://'), { message: 'Only http:// or https:// URLs are allowed' })
 
 const DiscoverTitleQuery = z.object({
-  url: httpsUrl,
+  url: httpOrHttpsUrl,
 })
 
 const CreateFeedBody = z
   .object({
-    url: httpsUrl,
+    url: httpOrHttpsUrl,
     name: z.string().optional(),
     category_id: z.number().nullable().optional(),
     // Phase 2: user chose "whole site" — use this exact RSS URL
-    discovered_rss_url: httpsUrl.optional(),
+    discovered_rss_url: httpOrHttpsUrl.optional(),
     discovered_rss_title: z.string().optional(),
     // Phase 2: user chose "this page only" — skip to LLM inference
     force_page_selector: z.boolean().optional(),

@@ -107,6 +107,20 @@ describe('POST /api/articles/from-url', () => {
     expect(mockFetchArticleContent).toHaveBeenCalledWith('https://blog.example.com/post-1')
   })
 
+  it('201: creates article with http:// URL', async () => {
+    ensureClipFeed()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/articles/from-url',
+      headers: json,
+      payload: { url: 'http://blog.example.com/post-http' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(mockFetchArticleContent).toHaveBeenCalledWith('http://blog.example.com/post-http')
+  })
+
   it('201: uses provided title over fetched title', async () => {
     ensureClipFeed()
 

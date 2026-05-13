@@ -5,6 +5,8 @@
  * query parameters by the browser / React Router.
  */
 export function articleUrlToPath(url: string): string {
+  const isHttp = url.startsWith('http://')
   const raw = url.replace(/^https?:\/\//, '')
-  return '/' + raw.replace(/\?/g, '%3F').replace(/&/g, '%26').replace(/=/g, '%3D').replace(/#/g, '%23')
+  const path = raw.replace(/\?/g, '%3F').replace(/&/g, '%26').replace(/=/g, '%3D').replace(/#/g, '%23')
+  return isHttp ? '/http/' + path : '/' + path
 }

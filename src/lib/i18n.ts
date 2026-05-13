@@ -169,7 +169,7 @@ const dict = {
   'modal.add': { ja: '追加', en: 'Add' },
   'modal.errorRssNotDetected': { ja: 'このURLからRSSフィードを検出できませんでした', en: 'RSS could not be detected for this URL' },
   'modal.errorAlreadyExists': { ja: 'このフィードは既に登録されています', en: 'This feed already exists' },
-  'modal.errorHttpsOnly': { ja: 'https:// で始まるURLのみ対応しています', en: 'Only https:// URLs are allowed' },
+  'modal.errorHttpOrHttpsOnly': { ja: 'http:// または https:// で始まるURLのみ対応しています', en: 'Only http:// or https:// URLs are allowed' },
   'modal.genericError': { ja: 'エラーが発生しました', en: 'An error occurred' },
   'modal.step.rssDiscovery': { ja: 'RSS 検出', en: 'RSS discovery' },
   'modal.step.flaresolverr': { ja: 'JSレンダリング', en: 'JS rendering' },
