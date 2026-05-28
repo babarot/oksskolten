@@ -5,11 +5,11 @@ import seedConversationsJa from './seed/ja/conversations.json'
 import { getLocale, dt } from './i18n'
 import type { FeedWithCounts, ArticleListItem, ArticleDetail, Category } from '../../../shared/types'
 
-type Locale = 'ja' | 'en'
+type DemoLocale = ReturnType<typeof getLocale>
 
-const conversationsByLocale = {
-  en: seedConversationsEn,
-  ja: seedConversationsJa,
+const conversationsByLocale: Partial<Record<DemoLocale, SeedConversation[]>> = {
+  en: seedConversationsEn as SeedConversation[],
+  ja: seedConversationsJa as SeedConversation[],
 }
 
 /**
@@ -46,8 +46,8 @@ function resolveSeedDates() {
 let feeds: SeedFeed[] = structuredClone(seedFeeds) as SeedFeed[]
 let articles: SeedArticle[] = structuredClone(seedArticles) as SeedArticle[]
 resolveSeedDates()
-let currentConvLocale: Locale = getLocale()
-let conversations: SeedConversation[] = structuredClone(conversationsByLocale[currentConvLocale]) as SeedConversation[]
+let currentConvLocale: DemoLocale = getLocale()
+let conversations: SeedConversation[] = structuredClone(conversationsByLocale[currentConvLocale] ?? conversationsByLocale.en) as SeedConversation[]
 let nextFeedId = Math.max(...feeds.map(f => f.id)) + 1
 let nextArticleId = Math.max(...articles.map(a => a.id)) + 1
 const translatedIds = new Set<number>()
@@ -58,7 +58,7 @@ function ensureConversationLocale() {
   const locale = getLocale()
   if (locale === currentConvLocale) return
   currentConvLocale = locale
-  conversations = structuredClone(conversationsByLocale[locale]) as SeedConversation[]
+  conversations = structuredClone(conversationsByLocale[locale] ?? conversationsByLocale.en) as SeedConversation[]
 }
 
 interface SeedFeed {
