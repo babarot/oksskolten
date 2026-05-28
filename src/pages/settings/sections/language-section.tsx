@@ -16,6 +16,7 @@ export function LanguageSection() {
           options={[
             { value: 'ja' as Locale, label: t('settings.languageJa') },
             { value: 'en' as Locale, label: t('settings.languageEn') },
+            { value: 'zh' as Locale, label: t('settings.languageZh') },
           ]}
           value={locale}
           onChange={(val) => {
