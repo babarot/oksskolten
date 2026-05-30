@@ -9,6 +9,7 @@ import multipart from '@fastify/multipart'
 import cron, { type ScheduledTask } from 'node-cron'
 import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles } from './db.js'
 import { logger } from './logger.js'
+import { findProjectRoot } from './paths.js'
 
 const log = logger
 import { getDb } from './db/connection.js'
@@ -27,7 +28,7 @@ if (process.env.AUTH_DISABLED === '1' && process.env.NODE_ENV !== 'development')
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const projectRoot = path.resolve(__dirname, '..')
+const projectRoot = findProjectRoot(__dirname)
 
 // --- Migrations ---
 runMigrations()

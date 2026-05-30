@@ -1,4 +1,4 @@
-import Piscina from 'piscina'
+import { Piscina as PiscinaPool } from 'piscina'
 import { JSDOM } from 'jsdom'
 import { fetchHtml } from './http.js'
 import { fetchViaFlareSolverr } from './flaresolverr.js'
@@ -8,8 +8,11 @@ import type { ParseHtmlInput, ParseHtmlResult } from './contentWorker.js'
 // Worker pool for CPU-intensive DOM parsing (jsdom + Readability + Turndown).
 // Runs on separate threads so the main event loop stays responsive for API requests.
 // Inherit the parent's execArgv so the tsx TypeScript loader is available in workers.
-const pool = new Piscina({
-  filename: new URL('./contentWorker.ts', import.meta.url).href,
+// Always reference .js — tsx resolves .js → .ts transparently during development;
+// compiled .js files exist in dist/ for production. Resolves at the build layer
+// rather than with a runtime branch.
+const pool = new PiscinaPool({
+  filename: new URL('./contentWorker.js', import.meta.url).href,
   execArgv: process.execArgv,
   maxThreads: Number(process.env.PARSE_MAX_THREADS) || 2,
 })

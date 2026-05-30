@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import Database from 'libsql'
 import { logger } from '../logger.js'
 import { dataPath } from '../paths.js'
+import { findProjectRoot } from '../paths.js'
 
 const log = logger.child('db')
 
@@ -76,7 +77,7 @@ export function allNamed<T>(sql: string, params: Record<string, unknown>) {
 // --- Migrations ---
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const projectRoot = path.resolve(__dirname, '../..')
+const projectRoot = findProjectRoot(__dirname)
 
 /** Error messages from SQLite that indicate an already-applied schema change. */
 const IDEMPOTENT_ERRORS = ['duplicate column name', 'no such column', 'already exists'] as const
