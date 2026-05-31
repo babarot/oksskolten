@@ -13,9 +13,11 @@ export const ANTHROPIC_MODELS: ModelGroup[] = [
   { group: 'Latest', models: [
     { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', pricing: [1, 5] },
     { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', pricing: [3, 15] },
-    { value: 'claude-opus-4-6', label: 'Opus 4.6', pricing: [5, 25] },
+    { value: 'claude-opus-4-8', label: 'Opus 4.8', pricing: [5, 25] },
+    { value: 'claude-opus-4-7', label: 'Opus 4.7', pricing: [5, 25] },
   ]},
   { group: 'Legacy', models: [
+    { value: 'claude-opus-4-6', label: 'Opus 4.6', pricing: [5, 25] },
     { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', pricing: [3, 15] },
     { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', pricing: [5, 25] },
     { value: 'claude-sonnet-4-20250514', label: 'Sonnet 4', pricing: [3, 15] },
@@ -25,7 +27,9 @@ export const ANTHROPIC_MODELS: ModelGroup[] = [
 
 export const GEMINI_MODELS: ModelGroup[] = [
   { group: 'Latest', models: [
-    { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash-Lite', pricing: [0.25, 1.50] },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', pricing: [1.50, 9] },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', pricing: [2, 12] },
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', pricing: [0.25, 1.50] },
   ]},
   { group: 'Standard', models: [
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', pricing: [0.15, 0.60] },
@@ -38,12 +42,15 @@ export const GEMINI_MODELS: ModelGroup[] = [
 
 export const OPENAI_MODELS: ModelGroup[] = [
   { group: 'Latest', models: [
+    { value: 'gpt-5.5', label: 'GPT-5.5', pricing: [5, 30] },
     { value: 'gpt-5.4', label: 'GPT-5.4', pricing: [2.50, 15] },
+    { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', pricing: [0.75, 4.50] },
+    { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', pricing: [0.20, 1.25] },
+  ]},
+  { group: 'Standard', models: [
     { value: 'gpt-5.3', label: 'GPT-5.3', pricing: [1.75, 14] },
     { value: 'gpt-5-mini', label: 'GPT-5 Mini', pricing: [0.25, 2] },
     { value: 'gpt-5-nano', label: 'GPT-5 Nano', pricing: [0.05, 0.40] },
-  ]},
-  { group: 'Standard', models: [
     { value: 'gpt-4.1', label: 'GPT-4.1', pricing: [2, 8] },
     { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', pricing: [0.40, 1.60] },
     { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano', pricing: [0.10, 0.40] },
