@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-server/
 /data/
 /data-prod/
 docs/temp_*

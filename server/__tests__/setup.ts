@@ -13,7 +13,7 @@ vi.mock('node:dns/promises', () => ({
 // only resolve at runtime with the tsx loader.
 vi.mock('piscina', () => {
   return {
-    default: class MockPiscina {
+    Piscina: class MockPiscina {
       private handler: ((input: unknown) => unknown) | null = null
       private _loadPromise: Promise<void>
       constructor(opts: { filename: string }) {

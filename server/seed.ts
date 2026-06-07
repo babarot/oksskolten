@@ -6,8 +6,10 @@ import { logger } from './logger.js'
 
 const log = logger.child('seed')
 
+import { findProjectRoot } from './paths.js'
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const projectRoot = path.resolve(__dirname, '..')
+const projectRoot = findProjectRoot(__dirname)
 
 /**
  * Resolve relative date strings (e.g. "-3d", "-2d23h") to ISO 8601.

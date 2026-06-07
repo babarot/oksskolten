@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import Database from 'libsql'
 import { logger } from '../logger.js'
 import { dataPath } from '../paths.js'
+import { findProjectRoot } from '../paths.js'
 
 const log = logger.child('db')
 
@@ -32,7 +33,28 @@ function openDb(dbUrl: string) {
     instance.pragma('journal_mode = WAL')
   }
   instance.pragma('foreign_keys = ON')
+  // Limit SQLite internal heap growth to prevent native memory accumulation.
+  // Soft limit: SQLite tries to stay under this; exceeding it won't cause errors.
+  instance.pragma('soft_heap_limit = 268435456')  // 256MB
   return instance
+}
+
+/**
+ * Shrink SQLite memory and checkpoint WAL to release accumulated native heap.
+ * Safe to call periodically (e.g. every 5 min) to prevent libsql RSS growth.
+ * For remote (Turso) databases, only shrink_memory is attempted.
+ */
+export function shrinkMemory() {
+  try {
+    const remote = isRemote(process.env.DATABASE_URL || '')
+    if (!remote) {
+      db.pragma('wal_checkpoint(TRUNCATE)')
+    }
+    db.pragma('shrink_memory')
+    log.info('[db] Memory shrunk' + (remote ? '' : ' + WAL checkpoint'))
+  } catch (err) {
+    log.error('[db] shrinkMemory error:', err)
+  }
 }
 
 let db = openDb(process.env.DATABASE_URL || `file:${dataPath('rss.db')}`)
@@ -76,7 +98,7 @@ export function allNamed<T>(sql: string, params: Record<string, unknown>) {
 // --- Migrations ---
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const projectRoot = path.resolve(__dirname, '../..')
+const projectRoot = findProjectRoot(__dirname)
 
 /** Error messages from SQLite that indicate an already-applied schema change. */
 const IDEMPOTENT_ERRORS = ['duplicate column name', 'no such column', 'already exists'] as const
