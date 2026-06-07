@@ -1,32 +1,51 @@
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
 
-afterEach(() => {
-  cleanup()
-})
-
 // Node.js 25+ ships a built-in localStorage that lacks full Web Storage API.
 // Provide a proper in-memory implementation for tests.
-const store = new Map<string, string>()
+const localStore = new Map<string, string>()
 
 const localStorageMock: Storage = {
   get length() {
-    return store.size
+    return localStore.size
   },
   clear() {
-    store.clear()
+    localStore.clear()
   },
   getItem(key: string) {
-    return store.get(key) ?? null
+    return localStore.get(key) ?? null
   },
   key(index: number) {
-    return [...store.keys()][index] ?? null
+    return [...localStore.keys()][index] ?? null
   },
   removeItem(key: string) {
-    store.delete(key)
+    localStore.delete(key)
   },
   setItem(key: string, value: string) {
-    store.set(key, String(value))
+    localStore.set(key, String(value))
+  },
+}
+
+const sessionStore = new Map<string, string>()
+
+const sessionStorageMock: Storage = {
+  get length() {
+    return sessionStore.size
+  },
+  clear() {
+    sessionStore.clear()
+  },
+  getItem(key: string) {
+    return sessionStore.get(key) ?? null
+  },
+  key(index: number) {
+    return [...sessionStore.keys()][index] ?? null
+  },
+  removeItem(key: string) {
+    sessionStore.delete(key)
+  },
+  setItem(key: string, value: string) {
+    sessionStore.set(key, String(value))
   },
 }
 
@@ -34,6 +53,18 @@ Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
   writable: true,
   configurable: true,
+})
+
+Object.defineProperty(globalThis, 'sessionStorage', {
+  value: sessionStorageMock,
+  writable: true,
+  configurable: true,
+})
+
+afterEach(() => {
+  cleanup()
+  localStore.clear()
+  sessionStore.clear()
 })
 
 // Radix UI Dialog/AlertDialog needs ResizeObserver and scrollTo in jsdom
