@@ -25,19 +25,34 @@ const jsWorkerUrl = new URL('./contentWorker.js', import.meta.url)
 const tsWorkerUrl = new URL('./contentWorker.ts', import.meta.url)
 const workerUrl = fs.existsSync(fileURLToPath(jsWorkerUrl)) ? jsWorkerUrl : tsWorkerUrl
 
-const pool = new PiscinaPool({
-  filename: workerUrl.href,
-  execArgv: process.execArgv,
-  resourceLimits: {
-    maxOldGenerationSizeMb: 512,
-  },
-  maxThreads: Number(process.env.PARSE_MAX_THREADS) || 2,
-  // Keep at least one warm worker. minThreads: 0 forced a cold spawn for the
-  // first task in every sparse batch; the spawn-plus-parse latency could
-  // approach the per-task timeout under load.
-  minThreads: 1,
-  idleTimeout: 30_000,
-})
+/**
+ * Factory for the Piscina worker pool. Exported so integration tests can
+ * spawn an isolated pool without colliding with the production-side
+ * singleton in `getPool()`. Production code must always go through
+ * `getPool()`, not call this directly, to avoid duplicate pools.
+ */
+export function createWorkerPool(): PiscinaPool {
+  return new PiscinaPool({
+    filename: workerUrl.href,
+    execArgv: process.execArgv,
+    resourceLimits: {
+      maxOldGenerationSizeMb: 512,
+    },
+    maxThreads: Number(process.env.PARSE_MAX_THREADS) || 2,
+    // Keep at least one warm worker. minThreads: 0 forced a cold spawn for the
+    // first task in every sparse batch; the spawn-plus-parse latency could
+    // approach the per-task timeout under load.
+    minThreads: 1,
+    idleTimeout: 30_000,
+  })
+}
+
+let _pool: PiscinaPool | null = null
+
+function getPool(): PiscinaPool {
+  if (!_pool) _pool = createWorkerPool()
+  return _pool
+}
 
 /** Per-task timeout for worker pool. */
 const WORKER_TIMEOUT_MS = 45_000
@@ -53,7 +68,7 @@ async function runWithTimeout(input: ParseHtmlInput, timeoutMs: number): Promise
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(new Error('Worker timeout')), timeoutMs)
   try {
-    return await pool.run(input, { signal: controller.signal })
+    return await getPool().run(input, { signal: controller.signal })
   } finally {
     clearTimeout(timeoutId)
   }
