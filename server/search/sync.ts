@@ -40,6 +40,14 @@ const INDEX_SETTINGS = {
 
 const BATCH_SIZE = 1000
 
+// Meilisearch processes each task in a few seconds, but accumulated queue
+// depth (score sync writes, individual article updates, prior rebuild batches)
+// can keep a task waiting several minutes before it starts. The previous
+// 60-second client wait timed out long before the task was even picked up,
+// even when the server-side task itself succeeded. 5 minutes accommodates
+// typical queue depth at ~10k articles; revisit if dataset grows further.
+const MEILI_TASK_TIMEOUT_MS = 300_000
+
 export async function rebuildSearchIndex(): Promise<void> {
   if (rebuilding) {
     log.info('Rebuild already in progress, skipping')
@@ -58,13 +66,13 @@ export async function rebuildSearchIndex(): Promise<void> {
 
     // 1. Create or reset staging index
     if (indexSet.has(ARTICLES_STAGING_INDEX)) {
-      await client.deleteIndex(ARTICLES_STAGING_INDEX).waitTask({ timeout: 60_000 })
+      await client.deleteIndex(ARTICLES_STAGING_INDEX).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
     }
-    await client.createIndex(ARTICLES_STAGING_INDEX, { primaryKey: 'id' }).waitTask({ timeout: 60_000 })
+    await client.createIndex(ARTICLES_STAGING_INDEX, { primaryKey: 'id' }).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
 
     // 2. Apply index settings to staging
     const stagingIndex = client.index(ARTICLES_STAGING_INDEX)
-    await stagingIndex.updateSettings(INDEX_SETTINGS).waitTask({ timeout: 60_000 })
+    await stagingIndex.updateSettings(INDEX_SETTINGS).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
 
     // 3. Fetch all articles from SQLite and batch-insert into staging
     const rows = getDb().prepare(`
@@ -90,7 +98,7 @@ export async function rebuildSearchIndex(): Promise<void> {
 
     for (let i = 0; i < docs.length; i += BATCH_SIZE) {
       const batch = docs.slice(i, i + BATCH_SIZE)
-      await stagingIndex.addDocuments(batch).waitTask({ timeout: 60_000 })
+      await stagingIndex.addDocuments(batch).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
     }
 
     // 4. Promote staging to production
@@ -98,15 +106,15 @@ export async function rebuildSearchIndex(): Promise<void> {
       // Swap articles <-> articles_staging, then clean up old data
       await client.swapIndexes([
         { indexes: [ARTICLES_INDEX, ARTICLES_STAGING_INDEX] } as any,
-      ]).waitTask({ timeout: 60_000 })
-      await client.deleteIndex(ARTICLES_STAGING_INDEX).waitTask({ timeout: 60_000 })
+      ]).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
+      await client.deleteIndex(ARTICLES_STAGING_INDEX).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
     } else {
       // First run: no existing articles index — create empty one for swap
-      await client.createIndex(ARTICLES_INDEX, { primaryKey: 'id' }).waitTask({ timeout: 60_000 })
+      await client.createIndex(ARTICLES_INDEX, { primaryKey: 'id' }).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
       await client.swapIndexes([
         { indexes: [ARTICLES_INDEX, ARTICLES_STAGING_INDEX] } as any,
-      ]).waitTask({ timeout: 60_000 })
-      await client.deleteIndex(ARTICLES_STAGING_INDEX).waitTask({ timeout: 60_000 })
+      ]).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
+      await client.deleteIndex(ARTICLES_STAGING_INDEX).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
     }
 
     // 5. Replay change log
@@ -116,7 +124,7 @@ export async function rebuildSearchIndex(): Promise<void> {
       const deletes = changeLog.filter((e): e is Extract<ChangeEntry, { action: 'delete' }> => e.action === 'delete')
 
       if (upserts.length > 0) {
-        await prodIndex.addDocuments(upserts.map((e) => e.doc)).waitTask({ timeout: 60_000 })
+        await prodIndex.addDocuments(upserts.map((e) => e.doc)).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
       }
       for (const del of deletes) {
         await prodIndex.deleteDocument(del.id)
@@ -237,7 +245,7 @@ export async function syncAllScoredArticlesToSearch(): Promise<number> {
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
-    await index.updateDocuments(batch.map(({ id, score }) => ({ id, score }))).waitTask({ timeout: 60_000 })
+    await index.updateDocuments(batch.map(({ id, score }) => ({ id, score }))).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
   }
 
   return rows.length
