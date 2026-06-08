@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.5.1](https://github.com/babarot/oksskolten/compare/v0.5.0...v0.5.1) - 2026-06-08
+### Bug fixes
+- fix(fetcher): refresh stale garbage-extracted articles from current RSS by @babarot in https://github.com/babarot/oksskolten/pull/85
+- fix(search): skip startup rebuild when index is already populated by @babarot in https://github.com/babarot/oksskolten/pull/87
+
 ## [v0.5.0](https://github.com/babarot/oksskolten/compare/v0.4.2...v0.5.0) - 2026-06-08
 ### New Features
 - feat: add support for vLLM LLM provider by @pju-hoge in https://github.com/babarot/oksskolten/pull/56
