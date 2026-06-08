@@ -6,6 +6,7 @@ import {
   getRetryArticles,
   getRetryStats,
   insertArticle,
+  markArticleRefreshAttempted,
   updateArticleContent,
   updateFeedError,
   updateFeedRateLimit,
@@ -52,13 +53,14 @@ function refreshStaleArticles(rssItems: RssItem[], existingUrls: Set<string>): v
   const refreshCandidates = getArticlesNeedingRefresh([...existingUrls], MIN_EXTRACTED_LENGTH)
   if (refreshCandidates.length === 0) return
   const itemsByUrl = new Map(rssItems.map(i => [i.url, i]))
+  const now = new Date().toISOString()
   for (const candidate of refreshCandidates) {
     const rssItem = itemsByUrl.get(candidate.url)
-    if (!rssItem?.excerpt) continue
-    const md = convertHtmlToMarkdown(rssItem.excerpt)
-    const mdLen = md.replace(/\s+/g, ' ').trim().length
     const currentLen = (candidate.full_text ?? '').replace(/\s+/g, ' ').trim().length
-    if (mdLen > currentLen) {
+    const md = rssItem?.excerpt ? convertHtmlToMarkdown(rssItem.excerpt) : ''
+    const mdLen = md.replace(/\s+/g, ' ').trim().length
+
+    if (md && mdLen > currentLen) {
       updateArticleContent(candidate.id, {
         full_text: md,
         excerpt: markdownToExcerpt(md),
@@ -68,8 +70,16 @@ function refreshStaleArticles(rssItems: RssItem[], existingUrls: Set<string>): v
         summary: null,
         full_text_translated: null,
         translated_lang: null,
+        last_refresh_attempt_at: now,
       })
       log.info({ url: candidate.url, prevLen: currentLen, newLen: mdLen }, 'refreshed stale article with RSS excerpt')
+    } else {
+      // Couldn't improve this one (no RSS excerpt, or excerpt no longer in
+      // the current feed). Record the attempt so the backoff window kicks
+      // in and we don't keep bypassing the RSS HTTP cache for this feed
+      // indefinitely. Use the lightweight helper so we don't trigger a
+      // Meilisearch resync for a no-op update.
+      markArticleRefreshAttempted(candidate.id, now)
     }
   }
 }

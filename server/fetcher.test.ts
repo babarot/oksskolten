@@ -803,6 +803,68 @@ describe('fetchAllFeeds', () => {
     expect(row.translated_lang).toBeNull()
   })
 
+  it('skips stale articles within the refresh-attempt backoff window', async () => {
+    const feed = seedFeed()
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Recently Tried',
+      url: 'https://example.com/recent-attempt',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+    // Mark the article as just-attempted so the backoff window excludes it
+    // from the next refresh pass.
+    const { getDb } = await import('./db.js')
+    getDb().prepare('UPDATE articles SET last_refresh_attempt_at = datetime(\'now\') WHERE url = ?').run('https://example.com/recent-attempt')
+
+    const description = '<p>RSS has a perfectly good description that would otherwise replace the garbage content, but the backoff should keep us from re-attempting yet.</p>'
+    const rssXml = rss20Xml('Test', [
+      { title: 'Recently Tried', link: 'https://example.com/recent-attempt', description },
+    ])
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/recent-attempt') as { full_text: string | null }
+    expect(row.full_text).toBe('Essay')
+  })
+
+  it('records a refresh attempt timestamp even when the RSS excerpt cannot improve the article', async () => {
+    const feed = seedFeed()
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Unfixable',
+      url: 'https://example.com/unfixable',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+
+    // RSS still has the item but no description — refresh can't improve it.
+    const rssXml = rss20Xml('Test', [
+      { title: 'Unfixable', link: 'https://example.com/unfixable' },
+    ])
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text, last_refresh_attempt_at FROM articles WHERE url = ?').get('https://example.com/unfixable') as { full_text: string | null; last_refresh_attempt_at: string | null }
+    // Body unchanged because RSS had nothing better...
+    expect(row.full_text).toBe('Essay')
+    // ...but the attempt was recorded so we back off for the next cycle.
+    expect(row.last_refresh_attempt_at).not.toBeNull()
+  })
+
   it('bypasses the RSS content-hash cache so refresh runs even when the feed XML is unchanged', async () => {
     const feed = seedFeed()
     insertArticle({
