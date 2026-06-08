@@ -19,6 +19,11 @@ export function _setRebuilding(value: boolean): void {
   rebuilding = value
 }
 
+/** @internal Test-only helper to reset the searchReady flag between cases */
+export function _setSearchReady(value: boolean): void {
+  searchReady = value
+}
+
 // --- Change log for rebuild consistency ---
 
 type ChangeEntry =
@@ -166,6 +171,11 @@ export async function ensureSearchIndex(): Promise<void> {
     if (articles) {
       const stats = await client.index(ARTICLES_INDEX).getStats()
       if (stats.numberOfDocuments > 0) {
+        // Apply current INDEX_SETTINGS idempotently so a redeploy that
+        // changed filterableAttributes / searchableAttributes / etc. still
+        // picks up the new schema without paying for a full rebuild.
+        // Meilisearch treats matching settings as a no-op.
+        await client.index(ARTICLES_INDEX).updateSettings(INDEX_SETTINGS).waitTask({ timeout: MEILI_TASK_TIMEOUT_MS })
         searchReady = true
         log.info(`Search index already populated (${stats.numberOfDocuments} docs); skipping startup rebuild`)
         return
@@ -175,6 +185,13 @@ export async function ensureSearchIndex(): Promise<void> {
     log.warn('ensureSearchIndex check failed; falling through to rebuild:', err)
   }
   await rebuildSearchIndex()
+  if (!searchReady) {
+    // rebuildSearchIndex swallows its own errors and just leaves
+    // searchReady at its prior value. Surface that as a thrown error so
+    // the startup retry loop in server/index.ts can back off and try
+    // again instead of declaring success against an unbuilt index.
+    throw new Error('Search index rebuild did not complete')
+  }
 }
 
 // --- Fire-and-forget sync helpers ---

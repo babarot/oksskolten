@@ -30,7 +30,7 @@ vi.mock('./client.js', () => ({
   ARTICLES_STAGING_INDEX: 'articles_staging',
 }))
 
-import { ensureSearchIndex, isSearchReady, syncAllScoredArticlesToSearch, _setRebuilding } from './sync.js'
+import { ensureSearchIndex, isSearchReady, syncAllScoredArticlesToSearch, _setRebuilding, _setSearchReady } from './sync.js'
 
 function seedFeed(): number {
   return getDb().prepare(
@@ -151,19 +151,27 @@ describe('ensureSearchIndex', () => {
     mockUpdateDocuments.mockClear()
     mockWaitTask.mockClear()
     _setRebuilding(false)
+    _setSearchReady(false)
   })
 
-  it('skips rebuild when the articles index already has documents', async () => {
+  it('skips rebuild when the articles index already has documents and reapplies settings idempotently', async () => {
     mockGetIndexes.mockResolvedValue({ results: [{ uid: 'articles' }] })
     mockGetStats.mockResolvedValue({ numberOfDocuments: 42 })
 
     await ensureSearchIndex()
 
     expect(isSearchReady()).toBe(true)
-    // Skipping means we never touch any of the heavy rebuild operations.
+    // Skipping means we never touch the heavy create / swap operations.
     expect(mockCreateIndex).not.toHaveBeenCalled()
     expect(mockDeleteIndex).not.toHaveBeenCalled()
     expect(mockAddDocuments).not.toHaveBeenCalled()
+    // Settings must still be reapplied so a redeploy that changed the
+    // schema (new filterable attribute, etc.) picks it up without waiting
+    // for the 6h cron rebuild.
+    expect(mockUpdateSettings).toHaveBeenCalledTimes(1)
+    const appliedSettings = mockUpdateSettings.mock.calls[0][0] as Record<string, unknown>
+    expect(appliedSettings).toHaveProperty('filterableAttributes')
+    expect(appliedSettings).toHaveProperty('searchableAttributes')
   })
 
   it('falls through to rebuild when the articles index is missing', async () => {
@@ -193,5 +201,17 @@ describe('ensureSearchIndex', () => {
     await ensureSearchIndex()
 
     expect(mockCreateIndex).toHaveBeenCalled()
+  })
+
+  it('throws when the fallthrough rebuild fails so the startup retry loop can back off', async () => {
+    // No indexes exist, so ensureSearchIndex must fall through to rebuild.
+    // Make rebuildSearchIndex hit a hard failure that its internal catch
+    // will swallow without setting searchReady. ensureSearchIndex must
+    // surface that as a thrown error to its caller.
+    mockGetIndexes.mockResolvedValueOnce({ results: [] }) // ensure check: no articles
+    mockGetIndexes.mockRejectedValueOnce(new Error('meili down')) // rebuild's own check
+
+    await expect(ensureSearchIndex()).rejects.toThrow(/rebuild/i)
+    expect(isSearchReady()).toBe(false)
   })
 })
