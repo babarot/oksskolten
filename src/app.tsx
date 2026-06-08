@@ -46,17 +46,17 @@ function AppLayout() {
 
   const { data: profile } = useSWR<{ language: string | null }>('/api/settings/profile', fetcher)
 
-  // Query parameter ?lang=ja|en takes highest priority (useful for demo sharing links)
+  // Query parameter ?lang=ja|en|zh takes highest priority (useful for demo sharing links)
   const langFromUrl = useMemo(() => {
     const p = new URLSearchParams(window.location.search).get('lang')
-    return p === 'ja' || p === 'en' ? p : null
+    return p === 'ja' || p === 'en' || p === 'zh' ? p : null
   }, [])
 
   const [locale, setLocaleState] = useState<Locale>(() => {
     if (langFromUrl) return langFromUrl
     const cached = localStorage.getItem('locale')
-    if (cached === 'ja' || cached === 'en') return cached
-    return navigator.language.startsWith('ja') ? 'ja' : 'en'
+    if (cached === 'ja' || cached === 'en' || cached === 'zh') return cached
+    return navigator.language.startsWith('ja') ? 'ja' : navigator.language.startsWith('zh') ? 'zh' : 'en'
   })
 
   const setLocale = useCallback((l: Locale) => {
@@ -73,8 +73,8 @@ function AppLayout() {
     // Only apply profile language as initial fallback — if localStorage already
     // has a valid locale the user explicitly chose, respect it.
     const cached = localStorage.getItem('locale')
-    if (cached === 'ja' || cached === 'en') return
-    if (profile?.language === 'ja' || profile?.language === 'en') {
+    if (cached === 'ja' || cached === 'en' || cached === 'zh') return
+    if (profile?.language === 'ja' || profile?.language === 'en' || profile?.language === 'zh') {
       setLocale(profile.language)
     }
   }, [profile, setLocale, langFromUrl])
