@@ -1,5 +1,6 @@
 import {
   getEnabledFeeds,
+  getArticlesNeedingRefresh,
   getExistingArticleUrls,
   getRetryArticles,
   getRetryStats,
@@ -17,7 +18,7 @@ import { Semaphore, CONCURRENCY, errorMessage } from './fetcher/util.js'
 import { detectAndStoreSimilarArticles } from './similarity.js'
 import { type FetchProgressEvent, emitProgress, markFeedDone } from './fetcher/progress.js'
 import { fetchFullText, isBotBlockPage, convertHtmlToMarkdown, markdownToExcerpt, MIN_EXTRACTED_LENGTH } from './fetcher/content.js'
-import { type FetchRssResult, fetchAndParseRss, RateLimitError } from './fetcher/rss.js'
+import { type FetchRssResult, type RssItem, fetchAndParseRss, RateLimitError } from './fetcher/rss.js'
 import { computeInterval, computeEmpiricalInterval, sqliteFuture, DEFAULT_INTERVAL } from './fetcher/schedule.js'
 import { detectLanguage } from './fetcher/ai.js'
 import { logger } from './logger.js'
@@ -30,6 +31,41 @@ export { type FetchProgressEvent, fetchProgress, getFeedState } from './fetcher/
 export { discoverRssUrl } from './fetcher/rss.js'
 export { detectLanguage, summarizeArticle, streamSummarizeArticle, translateArticle, streamTranslateArticle } from './fetcher/ai.js'
 export type { AiTextResult, AiBillingMode } from './fetcher/ai.js'
+
+/**
+ * Replace garbage-extracted articles with the RSS excerpt when one is now
+ * available. Some sites (thin SPAs like essay.ink) return so little body
+ * HTML that Readability falls back to the OG title alone, leaving stored
+ * `full_text` as just a handful of characters. The new-article path
+ * already handles this via the `listingExcerpt` fallback in
+ * `fetchArticleContent`, but articles saved before that fallback existed,
+ * or saved when the RSS excerpt was temporarily missing, stay broken
+ * indefinitely because the retry queue only picks up rows with
+ * `last_error` set.
+ *
+ * Piggyback on every regular RSS fetch: for items still in the current
+ * feed whose stored body is shorter than `MIN_EXTRACTED_LENGTH`, swap in
+ * the markdown-converted RSS excerpt when it's larger than what's stored.
+ */
+function refreshStaleArticles(rssItems: RssItem[], existingUrls: Set<string>): void {
+  const refreshCandidates = getArticlesNeedingRefresh([...existingUrls], MIN_EXTRACTED_LENGTH)
+  if (refreshCandidates.length === 0) return
+  const itemsByUrl = new Map(rssItems.map(i => [i.url, i]))
+  for (const candidate of refreshCandidates) {
+    const rssItem = itemsByUrl.get(candidate.url)
+    if (!rssItem?.excerpt) continue
+    const md = convertHtmlToMarkdown(rssItem.excerpt)
+    const mdLen = md.replace(/\s+/g, ' ').trim().length
+    const currentLen = (candidate.full_text ?? '').replace(/\s+/g, ' ').trim().length
+    if (mdLen > currentLen) {
+      updateArticleContent(candidate.id, {
+        full_text: md,
+        excerpt: markdownToExcerpt(md),
+      })
+      log.info({ url: candidate.url, prevLen: currentLen, newLen: mdLen }, 'refreshed stale article with RSS excerpt')
+    }
+  }
+}
 
 // --- Article content fetching (shared by feed pipeline & clip) ---
 
@@ -227,6 +263,8 @@ export async function fetchSingleFeed(
 
   const urls = rssResult.items.map(i => i.url)
   const existing = getExistingArticleUrls(urls)
+  refreshStaleArticles(rssResult.items, existing)
+
   const tasks: ArticleTask[] = rssResult.items
     .filter(item => !existing.has(item.url))
     .map(item => ({
@@ -323,6 +361,7 @@ export async function fetchAllFeeds(
 
           const urls = rssResult.items.map(i => i.url)
           const existing = getExistingArticleUrls(urls)
+          refreshStaleArticles(rssResult.items, existing)
 
           const newItems: ArticleTask[] = rssResult.items
             .filter(item => !existing.has(item.url))

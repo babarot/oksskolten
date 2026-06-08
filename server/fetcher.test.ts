@@ -60,13 +60,14 @@ beforeEach(() => {
 
 // --- Fixture builders ---
 
-function rss20Xml(title: string, items: { title: string; link: string; pubDate?: string }[]): string {
+function rss20Xml(title: string, items: { title: string; link: string; pubDate?: string; description?: string }[]): string {
   const itemsXml = items
     .map(
       i => `<item>
       <title>${i.title}</title>
       <link>${i.link}</link>
       ${i.pubDate ? `<pubDate>${i.pubDate}</pubDate>` : ''}
+      ${i.description ? `<description><![CDATA[${i.description}]]></description>` : ''}
     </item>`,
     )
     .join('\n')
@@ -758,6 +759,67 @@ describe('fetchAllFeeds', () => {
 
     // Should not throw
     await expect(fetchAllFeeds()).resolves.toBeUndefined()
+  })
+
+  it('refreshes stale articles when current RSS has a richer excerpt', async () => {
+    const feed = seedFeed()
+    // Pre-insert an article that was saved with garbage-extracted content
+    // (e.g. only the OG title from a thin SPA site like essay.ink).
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Stale Article',
+      url: 'https://example.com/stale',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+
+    // Current RSS still has the same item, now with a substantial description.
+    const description = '<p>This is the proper article body that the RSS feed has all along. It is far longer than the stored garbage content and should replace it.</p>'
+    const rssXml = rss20Xml('Test', [
+      { title: 'Stale Article', link: 'https://example.com/stale', description },
+    ])
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/stale') as { full_text: string | null }
+    expect(row.full_text).toContain('proper article body')
+    expect(row.full_text).not.toBe('Essay')
+  })
+
+  it('does not refresh stale articles when current RSS lacks a richer excerpt', async () => {
+    const feed = seedFeed()
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Stale Article',
+      url: 'https://example.com/no-excerpt',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+
+    // RSS has the item but no description.
+    const rssXml = rss20Xml('Test', [
+      { title: 'Stale Article', link: 'https://example.com/no-excerpt' },
+    ])
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/no-excerpt') as { full_text: string | null }
+    // Stale content should remain untouched when RSS has nothing better to offer.
+    expect(row.full_text).toBe('Essay')
   })
 
   it('retry: excludes article with full_text from retry candidates', async () => {

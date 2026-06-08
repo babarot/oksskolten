@@ -404,6 +404,28 @@ export function updateArticleContent(
   if (doc) syncArticleToSearch(doc)
 }
 
+/**
+ * Return id + url + full_text for articles whose stored full_text trimmed
+ * length is below the given threshold. Used by the fetcher to detect
+ * previously-saved articles where extraction returned only a page title
+ * (e.g. thin SPA sites) so the RSS excerpt fallback can be retried in
+ * subsequent fetches.
+ */
+export function getArticlesNeedingRefresh(
+  urls: string[],
+  minLength: number,
+): { id: number; url: string; full_text: string | null }[] {
+  if (urls.length === 0) return []
+  const normalized = urls.map(normalizeUrl)
+  const placeholders = normalized.map(() => '?').join(',')
+  return getDb().prepare(`
+    SELECT id, url, full_text
+    FROM articles
+    WHERE url IN (${placeholders})
+      AND length(coalesce(trim(full_text), '')) < ?
+  `).all(...normalized, minLength) as { id: number; url: string; full_text: string | null }[]
+}
+
 export function getExistingArticleUrls(urls: string[]): Set<string> {
   if (urls.length === 0) return new Set()
   const normalized = urls.map(normalizeUrl)
