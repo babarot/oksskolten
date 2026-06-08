@@ -803,6 +803,36 @@ describe('fetchAllFeeds', () => {
     expect(row.translated_lang).toBeNull()
   })
 
+  it('matches RSS items to stale articles across URL encoding differences', async () => {
+    const feed = seedFeed()
+    // Stored URL uses percent-encoded Japanese path.
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Encoded',
+      url: 'https://example.com/%E8%A8%98%E4%BA%8B',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+
+    // RSS uses raw Unicode for the same article URL.
+    const description = '<p>This RSS body should reach the stored article despite the path being raw Unicode here and percent-encoded in the DB.</p>'
+    const rssXml = rss20Xml('Test', [
+      { title: 'Encoded', link: 'https://example.com/記事', description },
+    ])
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/%E8%A8%98%E4%BA%8B') as { full_text: string | null }
+    expect(row.full_text).toContain('reach the stored article')
+  })
+
   it('records a refresh attempt for stale articles that have rolled off the current RSS', async () => {
     const feed = seedFeed()
     // Stale article still in the DB but no longer appears in the current RSS.

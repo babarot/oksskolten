@@ -7,6 +7,7 @@ import {
   getRetryStats,
   insertArticle,
   markArticleRefreshAttempted,
+  normalizeUrl,
   updateArticleContent,
   updateFeedError,
   updateFeedRateLimit,
@@ -52,10 +53,15 @@ export type { AiTextResult, AiBillingMode } from './fetcher/ai.js'
 function refreshStaleArticles(feedId: number, rssItems: RssItem[]): void {
   const refreshCandidates = getArticlesNeedingRefresh(feedId, MIN_EXTRACTED_LENGTH)
   if (refreshCandidates.length === 0) return
-  const itemsByUrl = new Map(rssItems.map(i => [i.url, i]))
+  // Match RSS items against candidate articles using the same URL
+  // normalization the rest of the DB layer uses. Without this, a RSS item
+  // with a raw Unicode path won't line up with a stored article whose URL
+  // is percent-encoded (or vice versa) and the article would incorrectly
+  // be treated as rolled off the feed.
+  const itemsByUrl = new Map(rssItems.map(i => [normalizeUrl(i.url), i]))
   const now = new Date().toISOString()
   for (const candidate of refreshCandidates) {
-    const rssItem = itemsByUrl.get(candidate.url)
+    const rssItem = itemsByUrl.get(normalizeUrl(candidate.url))
     const currentLen = (candidate.full_text ?? '').replace(/\s+/g, ' ').trim().length
     const md = rssItem?.excerpt ? convertHtmlToMarkdown(rssItem.excerpt) : ''
     const mdLen = md.replace(/\s+/g, ' ').trim().length

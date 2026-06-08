@@ -9,7 +9,7 @@ import { logger } from '../logger.js'
 const log = logger.child('retention')
 
 /** Normalize a URL so that raw-Unicode and percent-encoded forms compare equal. */
-function normalizeUrl(raw: string): string {
+export function normalizeUrl(raw: string): string {
   try { return new URL(raw).href } catch { return raw }
 }
 
