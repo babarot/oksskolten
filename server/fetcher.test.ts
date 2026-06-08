@@ -764,13 +764,18 @@ describe('fetchAllFeeds', () => {
   it('refreshes stale articles when current RSS has a richer excerpt', async () => {
     const feed = seedFeed()
     // Pre-insert an article that was saved with garbage-extracted content
-    // (e.g. only the OG title from a thin SPA site like essay.ink).
+    // (e.g. only the OG title from a thin SPA site like essay.ink). Also
+    // seed derived data that was generated from the garbage body so the
+    // test can verify it's cleared.
     insertArticle({
       feed_id: feed.id,
       title: 'Stale Article',
       url: 'https://example.com/stale',
       published_at: '2024-01-01T00:00:00Z',
       full_text: 'Essay',
+      summary: 'Old summary built from garbage',
+      full_text_translated: 'Old translation built from garbage',
+      translated_lang: 'ja',
     })
 
     // Current RSS still has the same item, now with a substantial description.
@@ -788,8 +793,50 @@ describe('fetchAllFeeds', () => {
     await fetchAllFeeds()
 
     const { getDb } = await import('./db.js')
-    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/stale') as { full_text: string | null }
+    const row = getDb().prepare('SELECT full_text, summary, full_text_translated, translated_lang FROM articles WHERE url = ?').get('https://example.com/stale') as { full_text: string | null; summary: string | null; full_text_translated: string | null; translated_lang: string | null }
     expect(row.full_text).toContain('proper article body')
+    expect(row.full_text).not.toBe('Essay')
+    // Derived data built from the old garbage body must be cleared so the
+    // UI and chat tools regenerate from the repaired body.
+    expect(row.summary).toBeNull()
+    expect(row.full_text_translated).toBeNull()
+    expect(row.translated_lang).toBeNull()
+  })
+
+  it('bypasses the RSS content-hash cache so refresh runs even when the feed XML is unchanged', async () => {
+    const feed = seedFeed()
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Stale Article',
+      url: 'https://example.com/cached',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+
+    const description = '<p>RSS feed body content with enough length to be a meaningful replacement for the stored garbage.</p>'
+    const rssXml = rss20Xml('Test', [
+      { title: 'Stale Article', link: 'https://example.com/cached', description },
+    ])
+
+    // Pre-populate last_content_hash to mirror the prod scenario where the
+    // feed XML has not changed since the previous fetch. Without bypassing
+    // the cache, the refresh path would be skipped and the article would
+    // stay broken forever.
+    const { createHash } = await import('node:crypto')
+    const hash = createHash('sha256').update(rssXml).digest('hex')
+    const { getDb } = await import('./db.js')
+    getDb().prepare('UPDATE feeds SET last_content_hash = ? WHERE id = ?').run(hash, feed.id)
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse('', { status: 404 }))
+    })
+
+    await fetchAllFeeds()
+
+    const row = getDb().prepare('SELECT full_text FROM articles WHERE url = ?').get('https://example.com/cached') as { full_text: string | null }
+    expect(row.full_text).toContain('RSS feed body content')
     expect(row.full_text).not.toBe('Essay')
   })
 

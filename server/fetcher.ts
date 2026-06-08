@@ -1,5 +1,6 @@
 import {
   getEnabledFeeds,
+  countStaleArticlesByFeed,
   getArticlesNeedingRefresh,
   getExistingArticleUrls,
   getRetryArticles,
@@ -61,6 +62,12 @@ function refreshStaleArticles(rssItems: RssItem[], existingUrls: Set<string>): v
       updateArticleContent(candidate.id, {
         full_text: md,
         excerpt: markdownToExcerpt(md),
+        // The old full_text was garbage, so any derived summary or
+        // translation produced from it is also garbage. Clear them so
+        // the UI / chat tools regenerate on next access.
+        summary: null,
+        full_text_translated: null,
+        translated_lang: null,
       })
       log.info({ url: candidate.url, prevLen: currentLen, newLen: mdLen }, 'refreshed stale article with RSS excerpt')
     }
@@ -231,7 +238,12 @@ export async function fetchSingleFeed(
 
   let rssResult: FetchRssResult
   try {
-    rssResult = await fetchAndParseRss(feed, opts)
+    // Bypass HTTP cache if this feed still has stale garbage-extracted
+    // articles. RSS XML is often unchanged for old items, so a 304 / cache
+    // hit would skip the refresh path and the broken articles would never
+    // get a chance to be repaired.
+    const skipCache = opts?.skipCache || countStaleArticlesByFeed(feed.id, MIN_EXTRACTED_LENGTH) > 0
+    rssResult = await fetchAndParseRss(feed, { ...opts, skipCache })
     updateFeedError(feed.id, null)
     updateFeedCacheHeaders(feed.id, rssResult.etag, rssResult.lastModified, rssResult.contentHash)
   } catch (err) {
@@ -340,7 +352,8 @@ export async function fetchAllFeeds(
     feeds.map(feed =>
       semaphore.run(async () => {
         try {
-          const rssResult = await fetchAndParseRss(feed)
+          const skipCache = countStaleArticlesByFeed(feed.id, MIN_EXTRACTED_LENGTH) > 0
+          const rssResult = await fetchAndParseRss(feed, { skipCache })
           updateFeedError(feed.id, null)
           updateFeedCacheHeaders(feed.id, rssResult.etag, rssResult.lastModified, rssResult.contentHash)
 

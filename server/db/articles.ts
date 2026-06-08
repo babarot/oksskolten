@@ -426,6 +426,22 @@ export function getArticlesNeedingRefresh(
   `).all(...normalized, minLength) as { id: number; url: string; full_text: string | null }[]
 }
 
+/**
+ * Count articles for the given feed whose stored full_text trimmed length is
+ * below the threshold. Used by the fetcher to decide whether to bypass the
+ * RSS HTTP cache so the refresh path can run even when ETag / Last-Modified
+ * would otherwise short-circuit to a notModified result.
+ */
+export function countStaleArticlesByFeed(feedId: number, minLength: number): number {
+  const row = getDb().prepare(`
+    SELECT COUNT(*) AS n
+    FROM articles
+    WHERE feed_id = ?
+      AND length(coalesce(trim(full_text), '')) < ?
+  `).get(feedId, minLength) as { n: number }
+  return row.n
+}
+
 export function getExistingArticleUrls(urls: string[]): Set<string> {
   if (urls.length === 0) return new Set()
   const normalized = urls.map(normalizeUrl)
