@@ -20,6 +20,26 @@
 - refine(fonts): use curated stack for System Serif by @babarot in https://github.com/babarot/oksskolten/pull/80
 - fix(search): raise Meilisearch waitTask timeout to 5 minutes by @babarot in https://github.com/babarot/oksskolten/pull/82
 
+## [v0.5.0](https://github.com/babarot/oksskolten/compare/v0.4.2...v0.5.0) - 2026-06-08
+### New Features
+- feat: add support for vLLM LLM provider by @pju-hoge in https://github.com/babarot/oksskolten/pull/56
+### Bug fixes
+- Update feed items with excerpt by @asonas in https://github.com/babarot/oksskolten/pull/51
+- fix: add type="button" to cancel button in FolderStep by @tenajima in https://github.com/babarot/oksskolten/pull/66
+- Fix article lists not refreshing after bookmark/like toggle by @babarot in https://github.com/babarot/oksskolten/pull/76
+- fix(fetcher): relax worker memory limit and clean up timeout aborts by @babarot in https://github.com/babarot/oksskolten/pull/81
+### Improvements
+- Add fallback mechanism for RSS description as article content by @asonas in https://github.com/babarot/oksskolten/pull/46
+- feat(chat): increase tool round limit and add batch tools by @pju-hoge in https://github.com/babarot/oksskolten/pull/61
+- Replace skip checkbox with two-phase choice flow for feed scope by @babarot in https://github.com/babarot/oksskolten/pull/54
+- feat: implement zap keyboard navigation in article view and fix settings sync race condition by @pju-hoge in https://github.com/babarot/oksskolten/pull/68
+- fix: address production memory instability — tsx→node, worker idleTimeout, SQLite soft_heap_limit by @pju-hoge in https://github.com/babarot/oksskolten/pull/78
+### Others
+- Refresh cloud LLM model list to latest releases by @babarot in https://github.com/babarot/oksskolten/pull/77
+- Add new font option with "System Serif" by @pellaeon in https://github.com/babarot/oksskolten/pull/65
+- refine(fonts): use curated stack for System Serif by @babarot in https://github.com/babarot/oksskolten/pull/80
+- fix(search): raise Meilisearch waitTask timeout to 5 minutes by @babarot in https://github.com/babarot/oksskolten/pull/82
+
 ## [v0.4.2](https://github.com/babarot/oksskolten/compare/v0.4.1...v0.4.2) - 2026-03-26
 ### Improvements
 - Add support for custom key bindings in settings by @asonas in https://github.com/babarot/oksskolten/pull/37
