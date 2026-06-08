@@ -49,8 +49,8 @@ export type { AiTextResult, AiBillingMode } from './fetcher/ai.js'
  * feed whose stored body is shorter than `MIN_EXTRACTED_LENGTH`, swap in
  * the markdown-converted RSS excerpt when it's larger than what's stored.
  */
-function refreshStaleArticles(rssItems: RssItem[], existingUrls: Set<string>): void {
-  const refreshCandidates = getArticlesNeedingRefresh([...existingUrls], MIN_EXTRACTED_LENGTH)
+function refreshStaleArticles(feedId: number, rssItems: RssItem[]): void {
+  const refreshCandidates = getArticlesNeedingRefresh(feedId, MIN_EXTRACTED_LENGTH)
   if (refreshCandidates.length === 0) return
   const itemsByUrl = new Map(rssItems.map(i => [i.url, i]))
   const now = new Date().toISOString()
@@ -285,7 +285,7 @@ export async function fetchSingleFeed(
 
   const urls = rssResult.items.map(i => i.url)
   const existing = getExistingArticleUrls(urls)
-  refreshStaleArticles(rssResult.items, existing)
+  refreshStaleArticles(feed.id, rssResult.items)
 
   const tasks: ArticleTask[] = rssResult.items
     .filter(item => !existing.has(item.url))
@@ -384,7 +384,7 @@ export async function fetchAllFeeds(
 
           const urls = rssResult.items.map(i => i.url)
           const existing = getExistingArticleUrls(urls)
-          refreshStaleArticles(rssResult.items, existing)
+          refreshStaleArticles(feed.id, rssResult.items)
 
           const newItems: ArticleTask[] = rssResult.items
             .filter(item => !existing.has(item.url))

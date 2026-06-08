@@ -803,6 +803,40 @@ describe('fetchAllFeeds', () => {
     expect(row.translated_lang).toBeNull()
   })
 
+  it('records a refresh attempt for stale articles that have rolled off the current RSS', async () => {
+    const feed = seedFeed()
+    // Stale article still in the DB but no longer appears in the current RSS.
+    // Without an attempt record on this row, countStaleArticlesByFeed would
+    // keep returning > 0 and force skipCache forever.
+    insertArticle({
+      feed_id: feed.id,
+      title: 'Rolled Off',
+      url: 'https://example.com/rolled-off',
+      published_at: '2024-01-01T00:00:00Z',
+      full_text: 'Essay',
+    })
+
+    // The current RSS has at least one live item that is not the broken
+    // article. RSS parsers reject completely empty feeds, so include a
+    // placeholder live item to keep the parser happy.
+    const rssXml = rss20Xml('Test', [
+      { title: 'Live Item', link: 'https://example.com/live', description: '<p>Live item with enough body to keep the parser happy and not interfere with the rolled-off check.</p>' },
+    ])
+
+    mockFetch.mockImplementation((url: string | URL) => {
+      const u = url.toString()
+      if (u === feed.rss_url) return Promise.resolve(mockResponse(rssXml, { headers: { 'content-type': 'application/rss+xml' } }))
+      return Promise.resolve(mockResponse(articleHtml({ title: 'Live Item' })))
+    })
+
+    await fetchAllFeeds()
+
+    const { getDb } = await import('./db.js')
+    const row = getDb().prepare('SELECT full_text, last_refresh_attempt_at FROM articles WHERE url = ?').get('https://example.com/rolled-off') as { full_text: string | null; last_refresh_attempt_at: string | null }
+    expect(row.full_text).toBe('Essay')
+    expect(row.last_refresh_attempt_at).not.toBeNull()
+  })
+
   it('skips stale articles within the refresh-attempt backoff window', async () => {
     const feed = seedFeed()
     insertArticle({

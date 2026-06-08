@@ -425,27 +425,28 @@ export function updateArticleContent(
 const REFRESH_ATTEMPT_BACKOFF = "datetime('now', '-1 day')"
 
 /**
- * Return id + url + full_text for active articles whose stored full_text
- * trimmed length is below the threshold and that have not been attempted
- * within the backoff window. Used by the fetcher to detect previously-saved
- * articles where extraction returned only a page title (e.g. thin SPA
- * sites) so the RSS excerpt fallback can be retried.
+ * Return id + url + full_text for active articles in the given feed whose
+ * stored full_text trimmed length is below the threshold and that have not
+ * been attempted within the backoff window. Used by the fetcher to detect
+ * previously-saved articles where extraction returned only a page title
+ * (e.g. thin SPA sites) so the RSS excerpt fallback can be retried.
+ *
+ * Driven by feed_id, not by the current RSS URL list, so articles that
+ * have rolled off the live feed still get their backoff timestamp updated
+ * — otherwise their stale rows would keep skipCache enabled forever.
  */
 export function getArticlesNeedingRefresh(
-  urls: string[],
+  feedId: number,
   minLength: number,
 ): { id: number; url: string; full_text: string | null }[] {
-  if (urls.length === 0) return []
-  const normalized = urls.map(normalizeUrl)
-  const placeholders = normalized.map(() => '?').join(',')
   return getDb().prepare(`
     SELECT id, url, full_text
     FROM articles
-    WHERE url IN (${placeholders})
+    WHERE feed_id = ?
       AND purged_at IS NULL
       AND length(coalesce(trim(full_text), '')) < ?
       AND (last_refresh_attempt_at IS NULL OR datetime(last_refresh_attempt_at) < ${REFRESH_ATTEMPT_BACKOFF})
-  `).all(...normalized, minLength) as { id: number; url: string; full_text: string | null }[]
+  `).all(feedId, minLength) as { id: number; url: string; full_text: string | null }[]
 }
 
 /**
