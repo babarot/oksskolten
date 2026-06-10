@@ -88,14 +88,14 @@ const CheckUrlsBody = z.object({
   urls: z.array(z.string()).min(1, 'urls must be a non-empty array').max(MAX_CHECK_URLS, `Maximum ${MAX_CHECK_URLS} urls per request`),
 })
 
-const httpsUrl = z
+const httpOrHttpsUrl = z
   .string({ error: 'url is required' })
   .min(1, 'url is required')
   .url('must be a valid URL')
-  .refine((u) => u.startsWith('https://'), { message: 'Only https:// URLs are allowed' })
+  .refine((u) => u.startsWith('https://') || u.startsWith('http://'), { message: 'Only http:// or https:// URLs are allowed' })
 
 const FromUrlBody = z.object({
-  url: httpsUrl,
+  url: httpOrHttpsUrl,
   title: z.string().optional(),
   force: z.boolean().optional(),
 })

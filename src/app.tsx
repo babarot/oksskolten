@@ -221,12 +221,17 @@ function ArticleDetailPage() {
 
   if (!splat) return null
 
+  // Reconstruct the article URL, preserving the original protocol.
+  // http:// articles are routed as /http/<host>/<path> so this page can
+  // reconstruct the exact stored URL without hardcoding https://.
+  const rawSplat = splat.endsWith('.md') ? splat.slice(0, -3) : splat
+  const articleUrl = rawSplat.startsWith('http/')
+    ? `http://${decodeURIComponent(rawSplat.slice(5))}`
+    : `https://${decodeURIComponent(rawSplat)}`
+
   if (splat.endsWith('.md')) {
-    const articleUrl = `https://${decodeURIComponent(splat.slice(0, -3))}`
     return <ArticleRawPage articleUrl={articleUrl} />
   }
-
-  const articleUrl = `https://${decodeURIComponent(splat)}`
 
   return (
     <>

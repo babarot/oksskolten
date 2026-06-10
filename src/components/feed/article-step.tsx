@@ -38,8 +38,8 @@ export function ArticleStep({ onClose, onCreated, onArticleCreated }: ArticleSte
         setConflict({ article: err.data.article as { id: number; url: string; feed_id: number; feed_name: string } })
       } else if (err instanceof ApiError && err.status === 409) {
         setError({ message: t('modal.clipAlreadyExists'), isInfo: true })
-      } else if (err instanceof ApiError && err.message.includes('https://')) {
-        setError({ message: t('modal.errorHttpsOnly') })
+      } else if (err instanceof ApiError && err.message.includes('http:// or https://')) {
+        setError({ message: t('modal.errorHttpOrHttpsOnly') })
       } else {
         setError({ message: err instanceof Error ? err.message : t('modal.genericError') })
       }
