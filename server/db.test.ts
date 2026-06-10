@@ -246,6 +246,24 @@ describe('Articles', () => {
     expect(article!.url).toBe('https://example.com/%E8%A8%98%E4%BA%8B')
   })
 
+  it('getArticleByUrl handles protocol fallback (https -> http)', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'http://example.com/http-only' })
+
+    const article = getArticleByUrl('https://example.com/http-only')
+    expect(article).toBeDefined()
+    expect(article!.url).toBe('http://example.com/http-only')
+  })
+
+  it('getArticleByUrl handles protocol fallback (http -> https)', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/https-article' })
+
+    const article = getArticleByUrl('http://example.com/https-article')
+    expect(article).toBeDefined()
+    expect(article!.url).toBe('https://example.com/https-article')
+  })
+
 
   describe('getArticles filtering', () => {
     it('filters by feedId', () => {

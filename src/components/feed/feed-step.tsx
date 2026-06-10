@@ -16,7 +16,7 @@ function localizeServerError(raw: string, t: TranslateFn): string {
   if (raw.includes('RSS could not be detected')) return t('modal.errorRssNotDetected')
   if (raw.includes('Could not extract content')) return t('modal.errorPageExtract')
   if (raw.includes('already exists')) return t('modal.errorAlreadyExists')
-  if (raw.includes('https://')) return t('modal.errorHttpsOnly')
+  if (raw.includes('http:// or https://')) return t('modal.errorHttpOrHttpsOnly')
   return raw || t('modal.genericError')
 }
 

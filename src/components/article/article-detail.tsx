@@ -108,7 +108,7 @@ export function ArticleDetail({ articleUrl, enableZapNavigation = false }: Artic
 
   const { rewrittenHtml: displayContent } = useRewriteInternalLinks(
     content,
-    articleUrl,
+    article?.url || articleUrl,
     internalLinks === 'on',
   )
 
