@@ -24,6 +24,7 @@ import { fetchFullText, isBotBlockPage, convertHtmlToMarkdown, markdownToExcerpt
 import { type FetchRssResult, type RssItem, fetchAndParseRss, RateLimitError } from './fetcher/rss.js'
 import { computeInterval, computeEmpiricalInterval, sqliteFuture, DEFAULT_INTERVAL } from './fetcher/schedule.js'
 import { detectLanguage } from './fetcher/ai.js'
+import { autoSummarizeIfNeeded } from './fetcher/label-summarize.js'
 import { logger } from './logger.js'
 
 const log = logger.child('fetcher')
@@ -225,6 +226,8 @@ async function processArticle(task: ArticleTask): Promise<boolean> {
       })
       // Fire-and-forget: detect similar articles asynchronously
       void detectAndStoreSimilarArticles(articleId, task.title, task.feed_id, task.published_at)
+      // Fire-and-forget: auto-summarize if article matches a label with auto_summarize=1
+      void autoSummarizeIfNeeded(articleId, content.fullText)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (!msg.includes('UNIQUE constraint failed')) {

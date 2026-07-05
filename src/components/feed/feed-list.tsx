@@ -4,7 +4,7 @@ import useSWR from 'swr'
 import { fetcher } from '../../lib/fetcher'
 import { useI18n } from '../../lib/i18n'
 import { MD_BREAKPOINT } from '../../lib/breakpoints'
-import { Inbox, Plus, ChevronRight, Bookmark, ThumbsUp, Clock, Paperclip, Search, Command, ArrowBigUp, AlertTriangle, MessagesSquare } from 'lucide-react'
+import { Inbox, Plus, ChevronRight, Bookmark, ThumbsUp, Clock, Paperclip, Search, Command, ArrowBigUp, AlertTriangle, MessagesSquare, Tag } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { useFetchProgressContext } from '../../contexts/fetch-progress-context'
@@ -25,7 +25,7 @@ import { CommandPalette } from '../command-palette'
 import { useGlobalShortcuts } from '../../hooks/use-global-shortcuts'
 import { useAppLayout } from '../../app'
 import { extractDomain } from '../../lib/url'
-import type { FeedWithCounts, Category } from '../../../shared/types'
+import type { FeedWithCounts, Category, LabelWithCount } from '../../../shared/types'
 
 function isFeedInactive(feed: FeedWithCounts): boolean {
   if (feed.article_count === 0) return false
@@ -63,7 +63,7 @@ function FetchBadge({ fetched, total }: { fetched: number; total: number }) {
 export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkAllRead, onArticleMoved }: FeedListProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { feedId, categoryId } = useParams<{ feedId?: string; categoryId?: string }>()
+  const { feedId, categoryId, labelId } = useParams<{ feedId?: string; categoryId?: string; labelId?: string }>()
   const { t } = useI18n()
   const isInbox = location.pathname === '/inbox'
   const isBookmarks = location.pathname === '/bookmarks'
@@ -73,9 +73,16 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
   const isChat = location.pathname.startsWith('/chat')
   const selectedFeedId = feedId ? Number(feedId) : null
   const selectedCategoryId = categoryId ? Number(categoryId) : null
+  const selectedLabelId = labelId ? Number(labelId) : null
   const { progress, startFeedFetch, subscribeFeedFetch } = useFetchProgressContext()
   const { data: feedsData, mutate: mutateFeeds } = useSWR<{ feeds: FeedWithCounts[]; bookmark_count: number; like_count: number; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData, mutate: mutateCategories } = useSWR<{ categories: Category[] }>('/api/categories', fetcher)
+  const { settings } = useAppLayout()
+  const labelUnreadOnly = settings.labelUnreadOnly === 'on'
+  const labelsUrl = labelUnreadOnly ? '/api/labels?unread=1' : '/api/labels'
+  const { data: labelsData } = useSWR<{ labels: LabelWithCount[] }>(labelsUrl, fetcher)
+  const labels = labelsData?.labels ?? []
+  const [labelsCollapsed, setLabelsCollapsed] = useState(false)
   const feeds = useMemo(() => feedsData?.feeds ?? [], [feedsData])
   const categories = useMemo(() => categoriesData?.categories ?? [], [categoriesData])
 
@@ -209,7 +216,6 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
     },
   })
 
-  const { settings } = useAppLayout()
   const showFeedActivity = settings.showFeedActivity
 
   const totalUnread = feeds.reduce((sum, f) => sum + (f.disabled || f.type === 'clip' ? 0 : f.unread_count), 0)
@@ -490,6 +496,41 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
           <SidebarNavItem icon={MessagesSquare} label={t('chat.title')} selected={isChat} onClick={() => { void navigate('/chat'); onClose() }} />
 
           <SidebarNavItem icon={Plus} label={t('modal.addNew')} onClick={() => setFeedModalOpen(true)} className="text-muted hover:text-text" />
+
+          {labels.length > 0 && (
+            <>
+              <div className="px-2 pt-4 pb-1">
+                <button
+                  onClick={() => setLabelsCollapsed(c => !c)}
+                  className="flex items-center gap-1 w-full text-left group"
+                >
+                  <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted">{t('feeds.labels')}</h2>
+                  <ChevronRight
+                    size={12}
+                    strokeWidth={1.5}
+                    className={`text-muted transition-transform duration-150 ${labelsCollapsed ? '' : 'rotate-90'}`}
+                  />
+                </button>
+              </div>
+              {!labelsCollapsed && labels.map(label => (
+                <button
+                  key={label.id}
+                  onClick={() => { void navigate(`/labels/${label.id}`); onClose() }}
+                  className={`w-full text-left pl-2 pr-2 py-1.5 text-sm flex items-center justify-between rounded-lg outline-none transition-colors hover:bg-hover-sidebar ${
+                    selectedLabelId === label.id ? 'font-medium text-accent' : 'text-text'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Tag size={14} className="shrink-0 text-muted" />
+                    <span className="truncate">{label.name}</span>
+                  </div>
+                  {label.article_count > 0 && (
+                    <span className="text-[11px] text-muted tabular-nums ml-2 shrink-0">{label.article_count}</span>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
 
           <div className="px-2 pt-4 pb-1">
             <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted">{t('feeds.title')}</h2>

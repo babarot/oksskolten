@@ -38,6 +38,11 @@ export async function runChatTurn(provider: string, params: ChatTurnParams): Pro
     const { getVllmClient } = await import('../providers/llm/vllm.js')
     return runOpenAITurn(params, getVllmClient())
   }
+  if (provider === 'openrouter') {
+    const { runOpenAITurn } = await import('./adapter-openai.js')
+    const { getOpenRouterClient } = await import('../providers/llm/openrouter.js')
+    return runOpenAITurn(params, getOpenRouterClient())
+  }
   if (provider === 'openai') {
     const { runOpenAITurn } = await import('./adapter-openai.js')
     return runOpenAITurn(params)

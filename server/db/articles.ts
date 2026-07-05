@@ -1,4 +1,5 @@
 import { getDb, runNamed, getNamed, allNamed } from './connection.js'
+import { updateArticleLabels } from './labels.js'
 import type { Article, ArticleListItem, ArticleDetail } from './types.js'
 import type { MeiliArticleDoc } from '../search/client.js'
 import { syncArticleToSearch, deleteArticleFromSearch, deleteArticlesFromSearch, syncArticleScoreToSearch, syncArticleFiltersToSearch } from '../search/sync.js'
@@ -135,31 +136,29 @@ export function getArticles(opts: {
 
   if (opts.smartFloor) {
     const scopeWhere = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
+    const unreadAnd = scopeWhere ? scopeWhere + ' AND' : 'WHERE'
 
     // Candidate 1: SMART_FLOOR_DAYS ago
     const floorAgo = new Date(Date.now() - SMART_FLOOR_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
-    // Candidate 2: SMART_FLOOR_MIN_ARTICLES-th newest article's date
-    const top20Row = getNamed<{ floor: string | null }>(`
-      SELECT a.published_at AS floor FROM active_articles a
-      ${scopeWhere}
-      ORDER BY a.published_at DESC
-      LIMIT 1 OFFSET ${SMART_FLOOR_MIN_ARTICLES - 1}
-    `, params)
-
-    // Candidate 3: oldest unread article's date
-    const unreadRow = getNamed<{ floor: string | null }>(`
-      SELECT MIN(a.published_at) AS floor FROM active_articles a
-      ${scopeWhere ? scopeWhere + ' AND' : 'WHERE'} a.seen_at IS NULL AND a.published_at IS NOT NULL
+    // Candidates 2+3 in a single query: the Nth-newest article date and the oldest unread date
+    const floorRow = getNamed<{ top_floor: string | null; unread_floor: string | null }>(`
+      SELECT
+        (SELECT a.published_at FROM active_articles a
+         ${scopeWhere}
+         ORDER BY a.published_at DESC
+         LIMIT 1 OFFSET ${SMART_FLOOR_MIN_ARTICLES - 1}) AS top_floor,
+        (SELECT MIN(a.published_at) FROM active_articles a
+         ${unreadAnd} a.seen_at IS NULL AND a.published_at IS NOT NULL) AS unread_floor
     `, params)
 
     // If fewer than SMART_FLOOR_MIN_ARTICLES exist, skip the floor entirely — show all
-    if (!top20Row?.floor) {
+    if (!floorRow?.top_floor) {
       // no-op: don't add a date condition
     } else {
       // Pick the earliest (= shows the most articles)
-      const candidates: string[] = [floorAgo, top20Row.floor]
-      if (unreadRow?.floor) candidates.push(unreadRow.floor)
+      const candidates: string[] = [floorAgo, floorRow.top_floor]
+      if (floorRow.unread_floor) candidates.push(floorRow.unread_floor)
       const smartFloorDate = candidates.sort()[0]
 
       conditions.push('(a.published_at IS NULL OR a.published_at >= @smartFloorDate)')
@@ -193,8 +192,7 @@ export function getArticles(opts: {
   const articles = allNamed<ArticleListItem>(`
     SELECT a.id, a.feed_id, f.name AS feed_name,
            a.title, a.url, a.published_at, a.lang, a.summary, a.excerpt, a.og_image, a.seen_at, a.read_at, a.bookmarked_at, a.liked_at,
-           a.score,
-           (SELECT COUNT(*) FROM article_similarities WHERE article_id = a.id) AS similar_count
+           a.score
     FROM active_articles a
     JOIN feeds f ON a.feed_id = f.id
     ${where}
@@ -389,6 +387,7 @@ export function insertArticle(data: {
     last_error: data.last_error ?? null,
   })
   const articleId = info.lastInsertRowid as number
+  updateArticleLabels(articleId)
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
   return articleId
@@ -431,6 +430,8 @@ export function updateArticleContent(
   }
   if (fields.length === 0) return
   runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id`, params)
+  // full_text feeds label rule matching; recompute membership when it changes.
+  if (data.full_text !== undefined) updateArticleLabels(articleId)
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
 }

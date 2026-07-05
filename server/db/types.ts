@@ -1,5 +1,5 @@
 // Re-export shared types
-export type { Category, Feed, FeedWithCounts, Article, ArticleListItem, ArticleDetail } from '../../shared/types.js'
+export type { Category, Feed, FeedWithCounts, Article, ArticleListItem, ArticleDetail, Label, LabelWithCount } from '../../shared/types.js'
 
 export interface Conversation {
   id: string

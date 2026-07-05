@@ -51,14 +51,21 @@ async function readSSE(
 
 export function useFetchProgress() {
   const [progress, setProgress] = useState<Map<number, FeedProgress>>(new Map())
-  const { mutate: globalMutate } = useSWRConfig()
+  const { mutate: globalMutate, cache } = useSWRConfig()
 
   const revalidate = useCallback(() => {
     void globalMutate((key: unknown) =>
       typeof key === 'string' && key.includes('/api/feeds'))
-    void globalMutate((key: unknown) =>
-      typeof key === 'string' && key.includes('/api/articles'))
-  }, [globalMutate])
+    // globalMutate(filterFn) silently skips $inf$ keys from useSWRInfinite,
+    // so walk the cache directly to invalidate article list pages too. Covers
+    // the main list (/api/articles) and label article lists (/api/labels/:id/articles).
+    for (const key of cache.keys()) {
+      if (typeof key !== 'string') continue
+      if (key.includes('/api/articles') || key.includes('/api/labels')) {
+        void globalMutate(key)
+      }
+    }
+  }, [globalMutate, cache])
 
   const startFeedFetch = useCallback(async (feedId: number): Promise<FetchResult> => {
     setProgress(prev => new Map(prev).set(feedId, { fetched: 0, total: 0 }))

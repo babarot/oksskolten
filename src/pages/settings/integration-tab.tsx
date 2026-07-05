@@ -3,6 +3,7 @@ import { useAppLayout } from '../../app'
 import { Separator } from '@/components/ui/separator'
 import { ProviderConfigSection } from './sections/provider-config-section'
 import { TaskModelSection } from './sections/task-model-section'
+import { PromptsSection } from './sections/prompts-section'
 
 export function IntegrationTab() {
   const { settings } = useAppLayout()
@@ -13,6 +14,8 @@ export function IntegrationTab() {
       <ProviderConfigSection t={t} settings={settings} />
       <Separator />
       <TaskModelSection settings={settings} t={t} />
+      <Separator />
+      <PromptsSection />
     </>
   )
 }

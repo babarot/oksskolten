@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Construction, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import useSWR from 'swr'
 import { useI18n, APP_NAME } from '../lib/i18n'
 import { PasswordSettings } from '../components/settings/password-settings'
@@ -9,6 +9,8 @@ import { GitHubOAuthSettings } from '../components/settings/github-oauth-setting
 import { ApiTokenSettings } from '../components/settings/api-token-settings'
 import { ImageStorageSettings } from '../components/settings/image-storage-settings'
 import { GeneralTab } from './settings/general-tab'
+import { LabelsSection } from './settings/sections/labels-section'
+import { FeedsSection } from './settings/sections/feeds-section'
 const AppearanceTab = lazy(() => import('./settings/appearance-tab').then(m => ({ default: m.AppearanceTab })))
 import { IntegrationTab } from './settings/integration-tab'
 import { DataTab } from './settings/data-tab'
@@ -16,7 +18,7 @@ import { Separator } from '@/components/ui/separator'
 
 declare const __APP_VERSION__: string
 
-const TABS = ['general', 'appearance', 'integration', 'plugins', 'security', 'data', 'viewer', 'about'] as const
+const TABS = ['general', 'labels', 'appearance', 'integration', 'plugins', 'security', 'data', 'viewer', 'about'] as const
 
 export function SettingsPage() {
   const { tab: tabParam } = useParams<{ tab?: string }>()
@@ -64,14 +66,15 @@ export function SettingsPage() {
 
         <main className="flex-1 px-4 md:px-6 pt-4 md:pt-6 pb-32 space-y-8">
           {tab === 'viewer' && (
-            <div className="flex flex-col items-center justify-center py-16 text-muted select-none">
-              <Construction size={40} strokeWidth={1.5} className="mb-3 text-muted" />
-              <p className="text-sm">{t('settings.underDevelopment')}</p>
-            </div>
+            <FeedsSection />
           )}
 
           {tab === 'general' && (
             <GeneralTab />
+          )}
+
+          {tab === 'labels' && (
+            <LabelsSection />
           )}
 
           {tab === 'data' && (

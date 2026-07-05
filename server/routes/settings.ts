@@ -15,11 +15,13 @@ import { extractByDotPath } from '../fetcher/article-images.js'
 import { getMonthlyUsage } from '../providers/translate/google-translate.js'
 import { getDeeplMonthlyUsage } from '../providers/translate/deepl.js'
 import { parseOrBadRequest } from '../lib/validation.js'
+import { AI_DEFAULT_PROMPTS } from '../fetcher/ai.js'
+import { DEFAULT_LANGUAGE } from '../../shared/lang.js'
 
 const ProfileBody = z.object({
   account_name: z.string().optional(),
   avatar_seed: z.string().nullable().optional(),
-  language: z.enum(['ja', 'en'], { error: 'language must be "ja" or "en"' }).optional(),
+  language: z.enum(['ja', 'en', 'de'], { error: 'language must be "ja", "en", or "de"' }).optional(),
 })
 
 const ProviderParams = z.object({ provider: z.string() })
@@ -36,6 +38,7 @@ const PREF_KEYS = [
   'reading.chat_position',
   'reading.article_open_mode',
   'reading.category_unread_only',
+  'reading.label_unread_only',
   'reading.keyboard_navigation',
   'reading.keybindings',
   'appearance.mascot',
@@ -52,10 +55,13 @@ const PREF_KEYS = [
   'ollama.base_url',
   'ollama.custom_headers',
   'vllm.base_url',
+  'openrouter.base_url',
   'custom_themes',
   'retention.enabled',
   'retention.read_days',
   'retention.unread_days',
+  'prompt.summarize',
+  'prompt.translate',
 ] as const
 type PrefKey = typeof PREF_KEYS[number]
 
@@ -70,26 +76,30 @@ const PREF_ALLOWED: Record<PrefKey, string[] | null> = {
   'reading.chat_position': ['fab', 'inline'],
   'reading.article_open_mode': ['page', 'overlay'],
   'reading.category_unread_only': ['on', 'off'],
+  'reading.label_unread_only': ['on', 'off'],
   'reading.keyboard_navigation': ['on', 'off'],
   'reading.keybindings': null,
   'appearance.mascot': ['off', 'dream-puff', 'sleepy-giant'],
   'appearance.highlight_theme': null,
   'appearance.font_family': null,
   'appearance.list_layout': ['list', 'card', 'magazine', 'compact'],
-  'chat.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm'],
+  'chat.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm', 'openrouter'],
   'chat.model': getAllModelValues(),
-  'summary.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm'],
+  'summary.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm', 'openrouter'],
   'summary.model': getAllModelValues(),
-  'translate.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm', 'google-translate', 'deepl'],
+  'translate.provider': ['anthropic', 'gemini', 'openai', 'claude-code', 'ollama', 'vllm', 'openrouter', 'google-translate', 'deepl'],
   'translate.model': getAllModelValues(),
-  'translate.target_lang': ['ja', 'en'],
+  'translate.target_lang': ['ja', 'en', 'de'],
   'ollama.base_url': null,
   'ollama.custom_headers': null,
   'vllm.base_url': null,
+  'openrouter.base_url': null,
   'custom_themes': null,
   'retention.enabled': ['on', 'off'],
   'retention.read_days': null,
   'retention.unread_days': null,
+  'prompt.summarize': null,
+  'prompt.translate': null,
 }
 
 const PROVIDER_MODEL_PAIRS: Array<{ providerKey: PrefKey; modelKey: PrefKey }> = [
@@ -103,8 +113,8 @@ function validateProviderModel(body: Record<string, unknown>): string | null {
     const model = body[modelKey] !== undefined ? String(body[modelKey]) : getSetting(modelKey)
     const provider = body[providerKey] !== undefined ? String(body[providerKey]) : getSetting(providerKey)
     if (!model || !provider) continue
-    // google-translate, deepl, ollama, and vllm have no static model list
-    if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama' || provider === 'vllm') continue
+    // google-translate, deepl, ollama, vllm, and openrouter have no static model list
+    if (provider === 'google-translate' || provider === 'deepl' || provider === 'ollama' || provider === 'vllm' || provider === 'openrouter') continue
     // claude-code uses anthropic model IDs
     const effectiveProvider = provider === 'claude-code' ? 'anthropic' : provider
     const allowedModels = getModelValues(effectiveProvider)
@@ -224,7 +234,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
           const provider = body[modelKeyPair.providerKey] !== undefined
             ? String(body[modelKeyPair.providerKey])
             : getSetting(modelKeyPair.providerKey)
-          if (provider === 'ollama' || provider === 'vllm') {
+          if (provider === 'ollama' || provider === 'vllm' || provider === 'openrouter') {
             upsertSetting(key, value)
             updated = true
             continue
@@ -559,6 +569,7 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
     gemini: 'api_key.gemini',
     openai: 'api_key.openai',
     vllm: 'api_key.vllm',
+    openrouter: 'api_key.openrouter',
     'google-translate': 'api_key.google_translate',
     deepl: 'api_key.deepl',
   }
@@ -598,6 +609,15 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
 
   api.get('/api/settings/deepl/usage', async (_request, reply) => {
     reply.send(getDeeplMonthlyUsage())
+  })
+
+  api.get('/api/settings/prompts/defaults', async (_request, reply) => {
+    const summarizeLang = getSetting('general.language') || DEFAULT_LANGUAGE
+    const translateLang = getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
+    reply.send({
+      summarize: AI_DEFAULT_PROMPTS.summarize(summarizeLang),
+      translate: AI_DEFAULT_PROMPTS.translate(translateLang),
+    })
   })
 
   // --- Ollama endpoints ---
@@ -682,6 +702,53 @@ export async function settingsRoutes(api: FastifyInstance): Promise<void> {
   api.get('/api/settings/vllm/status', async (_request, reply) => {
     try {
       const res = await vllmFetch('/v1/models')
+      if (!res.ok) {
+        reply.send({ ok: false, error: `HTTP ${res.status}` })
+        return
+      }
+      const data = await res.json() as { data?: unknown[] }
+      reply.send({
+        ok: true,
+        model_count: data.data?.length || 0,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Connection failed'
+      reply.send({ ok: false, error: message })
+    }
+  })
+
+  // --- OpenRouter endpoints ---
+
+  async function openrouterFetch(path: string): Promise<Response> {
+    const { getOpenRouterBaseUrl, getOpenRouterApiKey } = await import('../providers/llm/openrouter.js')
+    const baseUrl = getOpenRouterBaseUrl().replace(/\/+$/, '')
+    const apiKey = getOpenRouterApiKey()
+    const headers: Record<string, string> = {}
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+    return fetch(`${baseUrl}${path}`, { headers, signal: AbortSignal.timeout(5_000) })
+  }
+
+  api.get('/api/settings/openrouter/models', async (_request, reply) => {
+    try {
+      const res = await openrouterFetch('/models')
+      if (!res.ok) {
+        reply.send({ models: [] })
+        return
+      }
+      const data = await res.json() as { data?: Array<{ id: string; name?: string }> }
+      const models = (data.data || []).map(m => ({
+        name: m.id,
+        label: m.name || m.id,
+      }))
+      reply.send({ models })
+    } catch {
+      reply.send({ models: [] })
+    }
+  })
+
+  api.get('/api/settings/openrouter/status', async (_request, reply) => {
+    try {
+      const res = await openrouterFetch('/models')
       if (!res.ok) {
         reply.send({ ok: false, error: `HTTP ${res.status}` })
         return

@@ -132,6 +132,13 @@ export async function demoFetcher(url: string): Promise<unknown> {
     return { language: getLocale(), account_name: demoProfileCustomName ?? dt('demo.defaultUser'), avatar_seed: demoProfileAvatarSeed }
   }
 
+  if (path === '/api/settings/prompts/defaults') {
+    return {
+      summarize: `Summarize the following article in English. Follow the format strictly.\n\n## Format\nLine 1: A concise 1-2 sentence summary\nLine 2: Empty line\nLine 3+: Key points as bullet points: "**Title** — explanation"\n\n## Rules\n- Output in Markdown (bullet points start with "- ")\n- Do not include any text other than the summary\n\n--- Article body ---\n{{article}}`,
+      translate: `Translate the following article into English.\nTranslate every word faithfully — do not summarize or omit anything.\nPreserve Markdown formatting.\n\n--- Article body ---\n{{article}}`,
+    }
+  }
+
   if (path === '/api/settings/preferences') {
     return {
       'reading.auto_mark_read': 'on',

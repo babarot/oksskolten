@@ -3,8 +3,9 @@ import { renderHook, act } from '@testing-library/react'
 
 // Mock SWR config
 const mockGlobalMutate = vi.fn()
+const mockCache = { keys: () => [][Symbol.iterator]() }
 vi.mock('swr', () => ({
-  useSWRConfig: () => ({ mutate: mockGlobalMutate }),
+  useSWRConfig: () => ({ mutate: mockGlobalMutate, cache: mockCache }),
 }))
 
 vi.mock('../lib/fetcher', () => ({

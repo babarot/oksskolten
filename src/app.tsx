@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, laz
 import { AnimatePresence, motion } from 'framer-motion'
 import useSWR, { SWRConfig } from 'swr'
 import { useSettings, type Settings } from './hooks/use-settings'
-import { fetcher } from './lib/fetcher'
+import { fetcher, apiPatch } from './lib/fetcher'
 import { LocaleContext, APP_NAME, type Locale, useI18n } from './lib/i18n'
 import { MD_BREAKPOINT } from './lib/breakpoints'
 import { useIsTouchDevice } from './hooks/use-is-touch-device'
@@ -49,14 +49,16 @@ function AppLayout() {
   // Query parameter ?lang=ja|en takes highest priority (useful for demo sharing links)
   const langFromUrl = useMemo(() => {
     const p = new URLSearchParams(window.location.search).get('lang')
-    return p === 'ja' || p === 'en' ? p : null
+    return p === 'ja' || p === 'en' || p === 'de' ? p : null
   }, [])
 
   const [locale, setLocaleState] = useState<Locale>(() => {
     if (langFromUrl) return langFromUrl
     const cached = localStorage.getItem('locale')
-    if (cached === 'ja' || cached === 'en') return cached
-    return navigator.language.startsWith('ja') ? 'ja' : 'en'
+    if (cached === 'ja' || cached === 'en' || cached === 'de') return cached
+    if (navigator.language.startsWith('ja')) return 'ja'
+    if (navigator.language.startsWith('de')) return 'de'
+    return 'en'
   })
 
   const setLocale = useCallback((l: Locale) => {
@@ -70,12 +72,19 @@ function AppLayout() {
       localStorage.setItem('locale', langFromUrl)
       return
     }
-    // Only apply profile language as initial fallback — if localStorage already
-    // has a valid locale the user explicitly chose, respect it.
     const cached = localStorage.getItem('locale')
-    if (cached === 'ja' || cached === 'en') return
-    if (profile?.language === 'ja' || profile?.language === 'en') {
-      setLocale(profile.language)
+    const validLocales = ['ja', 'en', 'de'] as const
+    type ValidLocale = typeof validLocales[number]
+    const isValid = (v: string | null): v is ValidLocale => validLocales.includes(v as ValidLocale)
+
+    if (!isValid(cached)) {
+      // No valid client locale — apply server value as fallback
+      if (isValid(profile?.language ?? null)) {
+        setLocale(profile!.language as Locale)
+      }
+    } else if (profile && profile.language !== cached) {
+      // Client and server are out of sync — push client locale to server
+      void apiPatch('/api/settings/profile', { language: cached }).catch(() => {})
     }
   }, [profile, setLocale, langFromUrl])
 
@@ -123,7 +132,7 @@ export function useAppLayout() {
 }
 
 function ArticleListPage() {
-  const { feedId, categoryId } = useParams<{ feedId?: string; categoryId?: string }>()
+  const { feedId, categoryId, labelId } = useParams<{ feedId?: string; categoryId?: string; labelId?: string }>()
   const location = useLocation()
   const { t } = useI18n()
   const isInbox = location.pathname === '/inbox'
@@ -133,6 +142,7 @@ function ArticleListPage() {
   const isClips = location.pathname === '/clips'
   const { data: feedsData } = useSWR<{ feeds: Array<{ id: number; name: string; type: string; category_id: number | null; category_name: string | null }>; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData } = useSWR<{ categories: Array<{ id: number; name: string }> }>('/api/categories', fetcher)
+  const { data: labelData } = useSWR<{ id: number; name: string }>(labelId ? `/api/labels/${labelId}` : null, fetcher)
 
   const headerName = isHistory
     ? t('feeds.history')
@@ -148,7 +158,9 @@ function ArticleListPage() {
           ? feedsData?.feeds.find(f => f.id === Number(feedId))?.name ?? null
           : categoryId
             ? categoriesData?.categories.find(c => c.id === Number(categoryId))?.name ?? null
-            : null
+            : labelId
+              ? labelData?.name ?? null
+              : null
 
   const articleListRef = useRef<ArticleListHandle>(null)
   const revalidateArticles = useCallback(() => articleListRef.current?.revalidate(), [])
@@ -243,7 +255,7 @@ function ArticleDetailPage() {
 
 // Determine the "page type" for animation decisions
 function getPageType(pathname: string): 'detail' | 'list' {
-  if (pathname === '/' || pathname === '/inbox' || pathname === '/bookmarks' || pathname === '/likes' || pathname === '/history' || pathname === '/clips' || pathname.startsWith('/feeds/') || pathname.startsWith('/categories/') || pathname.startsWith('/settings') || pathname.startsWith('/chat')) {
+  if (pathname === '/' || pathname === '/inbox' || pathname === '/bookmarks' || pathname === '/likes' || pathname === '/history' || pathname === '/clips' || pathname.startsWith('/feeds/') || pathname.startsWith('/categories/') || pathname.startsWith('/labels/') || pathname.startsWith('/settings') || pathname.startsWith('/chat')) {
     return 'list'
   }
   return 'detail'
@@ -322,6 +334,7 @@ function AnimatedRoutes() {
             <Route path="/clips" element={<ArticleListPage />} />
             <Route path="/feeds/:feedId" element={<ArticleListPage />} />
             <Route path="/categories/:categoryId" element={<ArticleListPage />} />
+            <Route path="/labels/:labelId" element={<ArticleListPage />} />
             <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
             <Route path="/settings/:tab" element={<SettingsPageWrapper />} />
             <Route path="/chat" element={<ChatPageWrapper />} />

@@ -5,7 +5,7 @@ import { deeplTranslate } from '../providers/translate/deepl.js'
 import { TASK_DEFAULTS } from '../../shared/models.js'
 import { DEFAULT_LANGUAGE, languageName } from '../../shared/lang.js'
 
-export type AiBillingMode = 'anthropic' | 'gemini' | 'openai' | 'claude-code' | 'ollama' | 'vllm' | 'google-translate' | 'deepl'
+export type AiBillingMode = 'anthropic' | 'gemini' | 'openai' | 'claude-code' | 'ollama' | 'vllm' | 'openrouter' | 'google-translate' | 'deepl'
 
 export interface AiTextResult {
   inputTokens: number
@@ -22,9 +22,8 @@ export function detectLanguage(fullText: string): string {
 }
 
 
-function buildSummarizePrompt(fullText: string): string {
-  const lang = getSetting('general.language') || DEFAULT_LANGUAGE
-  return `Summarize the following article in ${languageName(lang)}. Follow the format strictly.
+const DEFAULT_SUMMARIZE_PROMPT = (lang: string) =>
+  `Summarize the following article in ${languageName(lang)}. Follow the format strictly.
 
 ## Format
 Line 1: A concise 1-2 sentence summary of the article's main point (what the article is about and the author's key argument or conclusion)
@@ -39,19 +38,38 @@ Line 3+: Key points as bullet points. Each item should follow the format "**Poin
 - Do not include any text other than the summary (no headings, preambles, or notes)
 
 --- Article body ---
-${fullText}`
-}
+{{article}}`
 
-function buildTranslatePrompt(fullText: string): string {
-  const lang = getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
-  const targetLang = languageName(lang)
-  return `Translate the following article into ${targetLang}.
+const DEFAULT_TRANSLATE_PROMPT = (lang: string) =>
+  `Translate the following article into ${languageName(lang)}.
 Translate every word faithfully — do not summarize, compress, or omit anything.
 The translation must be 1:1 with the original text in volume.
 Preserve Markdown formatting. In particular, keep blockquote lines starting with ">".
 
 --- Article body ---
-${fullText}`
+{{article}}`
+
+function applyArticle(template: string, fullText: string): string {
+  return template.split('{{article}}').join(fullText)
+}
+
+function buildSummarizePrompt(fullText: string): string {
+  const custom = getSetting('prompt.summarize')
+  if (custom) return applyArticle(custom, fullText)
+  const lang = getSetting('general.language') || DEFAULT_LANGUAGE
+  return applyArticle(DEFAULT_SUMMARIZE_PROMPT(lang), fullText)
+}
+
+function buildTranslatePrompt(fullText: string): string {
+  const custom = getSetting('prompt.translate')
+  if (custom) return applyArticle(custom, fullText)
+  const lang = getSetting('translate.target_lang') || getSetting('general.language') || DEFAULT_LANGUAGE
+  return applyArticle(DEFAULT_TRANSLATE_PROMPT(lang), fullText)
+}
+
+export const AI_DEFAULT_PROMPTS = {
+  summarize: DEFAULT_SUMMARIZE_PROMPT,
+  translate: DEFAULT_TRANSLATE_PROMPT,
 }
 
 interface AiTaskConfig {
@@ -125,12 +143,8 @@ export async function streamSummarizeArticle(
 
 export async function translateArticle(fullText: string): Promise<{ fullTextTranslated: string } & AiTextResult> {
   const provider = getSetting('translate.provider') || TASK_DEFAULTS.translate.provider
-  if (provider === 'google-translate') {
-    return runGoogleTranslate(fullText)
-  }
-  if (provider === 'deepl') {
-    return runDeepl(fullText)
-  }
+  if (provider === 'google-translate') return runGoogleTranslate(fullText)
+  if (provider === 'deepl') return runDeepl(fullText)
   const r = await runAiTask(translateConfig, fullText)
   return { fullTextTranslated: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens, billingMode: r.billingMode, model: r.model }
 }

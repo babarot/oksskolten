@@ -1,8 +1,10 @@
 import { Semaphore } from './util.js'
 
 const FLARESOLVERR_URL = process.env.FLARESOLVERR_URL
-const FLARESOLVERR_CONCURRENCY = Number(process.env.FLARESOLVERR_CONCURRENCY) || 0
-const flaresolverrSemaphore = FLARESOLVERR_CONCURRENCY > 0 ? new Semaphore(FLARESOLVERR_CONCURRENCY) : null
+// Default 1 to prevent multiple simultaneous Chromium sessions during batch refresh
+const FLARESOLVERR_CONCURRENCY = Number(process.env.FLARESOLVERR_CONCURRENCY) || 1
+const FLARESOLVERR_MAX_TIMEOUT = Number(process.env.FLARESOLVERR_MAX_TIMEOUT) || 30_000
+const flaresolverrSemaphore = new Semaphore(FLARESOLVERR_CONCURRENCY)
 
 export type FlareSolverrResult = { body: string; contentType: string; url: string }
 
@@ -81,14 +83,14 @@ export async function fetchViaFlareSolverr(url: string, options?: FlareSolverrOp
   const cached = cache.get(cacheKey)
   if (cached && cached.expires > Date.now()) return cached.promise
 
-  const promise = flaresolverrSemaphore ? flaresolverrSemaphore.run(() => doFetch(url, options)) : doFetch(url, options)
+  const promise = flaresolverrSemaphore.run(() => doFetch(url, options))
   cache.set(cacheKey, { promise, expires: Date.now() + CACHE_TTL })
   return promise
 }
 
 async function doFetch(url: string, options?: FlareSolverrOptions): Promise<FlareSolverrResult | null> {
   try {
-    const payload: Record<string, unknown> = { cmd: 'request.get', url, maxTimeout: 60_000 }
+    const payload: Record<string, unknown> = { cmd: 'request.get', url, maxTimeout: FLARESOLVERR_MAX_TIMEOUT }
     if (options?.waitForSelector) {
       payload.waitForSelector = options.waitForSelector
     }

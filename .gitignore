@@ -14,3 +14,4 @@ coverage/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/rules/.*.md
+.DS_Store

@@ -7,7 +7,7 @@ import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import multipart from '@fastify/multipart'
 import cron, { type ScheduledTask } from 'node-cron'
-import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles, shrinkMemory } from './db.js'
+import { runMigrations, getSetting, upsertSetting, getOrCreateJwtSecret, ensureClipFeed, recalculateScores, purgeExpiredArticles, shrinkMemory, rebuildAllLabelMemberships } from './db.js'
 import { logger } from './logger.js'
 import { findProjectRoot } from './paths.js'
 
@@ -35,6 +35,13 @@ runMigrations()
 
 // --- Ensure virtual feed for clipped articles exists ---
 ensureClipFeed()
+
+// --- One-time backfill of materialized label membership (migration 0013) ---
+if (getSetting('article_labels.built') !== '1') {
+  rebuildAllLabelMemberships()
+  upsertSetting('article_labels.built', '1')
+  log.info('Backfilled article_labels membership table')
+}
 
 // --- Dev seed data ---
 if (process.env.NODE_ENV === 'development') {
@@ -110,8 +117,10 @@ app.addHook('onResponse', (req, reply, done) => {
 app.addHook('onRequest', (_req, reply, done) => {
   reply.header('X-Frame-Options', 'DENY')
   reply.header('X-Content-Type-Options', 'nosniff')
+  // Hashes cover the two inline scripts in index.html (theme init + boot error handler).
+  // Must be recomputed if those scripts change.
   reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
-  reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'")
+  reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'sha256-VAhGjND/znOjpK1ZuoI0YbrnC/Vl+7ANn8OSAx1bqjo=' 'sha256-GAGRPtDnfjLUhVjHqZFybOiMH1CNt1cbmu5Jqg7wzNU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'")
   done()
 })
 

@@ -226,7 +226,7 @@ export const PARTIAL_SELECTORS: string[] = [
   'article-category',
   'article-card',
   'article-citation',
-  'article__copy',
+  // Note: 'article__copy' intentionally omitted — BEM __copy = article body text in many CMS systems
   'article_date',
   'article-date',
   'article-end ',

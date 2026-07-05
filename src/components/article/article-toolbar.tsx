@@ -16,7 +16,7 @@ interface ArticleToolbarProps {
   onTranslate: () => void
   summary: string | null
   summarizing: boolean
-  onSummarize: () => void
+  onSummarize: (force?: boolean) => void
   isBookmarked: boolean
   isLiked: boolean
   archivingImages: boolean
@@ -65,8 +65,8 @@ export function ArticleToolbar({
           <path d="M4 1h7v7M11 1L5 7" />
         </svg>
       </ActionChip>
-      {summary === null && !summarizing && (
-        <ActionChip onClick={onSummarize}>
+      {!summarizing && (
+        <ActionChip onClick={() => onSummarize(summary !== null)}>
           <Sparkles className="w-3.5 h-3.5" />
           {t('article.summarize')}
         </ActionChip>
