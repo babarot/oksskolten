@@ -8,9 +8,14 @@ import { logger } from '../logger.js'
 
 const log = logger.child('retention')
 
-/** Normalize a URL so that raw-Unicode and percent-encoded forms compare equal. */
+/** Normalize a URL so that raw-Unicode and percent-encoded forms compare equal,
+ * and consecutive slashes in the path are collapsed (browsers do this too). */
 export function normalizeUrl(raw: string): string {
-  try { return new URL(raw).href } catch { return raw }
+  try {
+    const url = new URL(raw)
+    url.pathname = url.pathname.replace(/\/{2,}/g, '/')
+    return url.href
+  } catch { return raw }
 }
 
 function buildMeiliDoc(id: number): MeiliArticleDoc | null {

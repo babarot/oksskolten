@@ -14,6 +14,7 @@ import {
   recalculateScores,
   getRetryArticles,
   getRetryStats,
+  normalizeUrl,
 } from '../db.js'
 import { createFeed, createCategory, getDb } from '../db.js'
 
@@ -795,9 +796,9 @@ describe('getRetryStats', () => {
     expect(stats.exceeded).toBe(0)
   })
 
-  it('counts eligible, backoff-waiting, and exceeded correctly', () => {
+  it('getRetryStats', () => {
     const feed = seedFeed()
-    // eligible: last_error set, no full_text, retry_count=0, no last_retry_at
+    // never-tried: retry_count=0, last_retry_at is null
     seedArticle(feed.id, { url: 'https://example.com/e1', last_error: 'fail' })
 
     // backoff-waiting: retry_count=1, last_retry_at = now (within 60min backoff)
@@ -812,5 +813,42 @@ describe('getRetryStats', () => {
     expect(stats.eligible).toBe(1)
     expect(stats.backoff_waiting).toBe(1)
     expect(stats.exceeded).toBe(1)
+  })
+})
+
+describe('normalizeUrl', () => {
+  it('collapses consecutive slashes in path', () => {
+    expect(normalizeUrl('https://dailyportalz.jp//kiji/horai_chahan_in_osaka'))
+      .toBe('https://dailyportalz.jp/kiji/horai_chahan_in_osaka')
+  })
+
+  it('preserves single-slash URLs unchanged', () => {
+    expect(normalizeUrl('https://dailyportalz.jp/kiji/horai_chahan_in_osaka'))
+      .toBe('https://dailyportalz.jp/kiji/horai_chahan_in_osaka')
+  })
+
+  it('handles triple slashes', () => {
+    expect(normalizeUrl('https://example.com///path'))
+      .toBe('https://example.com/path')
+  })
+
+  it('preserves scheme and trailing slash', () => {
+    // Trailing slash after pathname collapse — OK
+    expect(normalizeUrl('https://example.com/path/'))
+      .toBe('https://example.com/path/')
+  })
+
+  it('does not touch query string or hash', () => {
+    expect(normalizeUrl('https://example.com//path?q=hello//world#//anchor'))
+      .toBe('https://example.com/path?q=hello//world#//anchor')
+  })
+
+  it('preserves double slash in protocol (https://)', () => {
+    expect(normalizeUrl('https://example.com/path'))
+      .toBe('https://example.com/path')
+  })
+
+  it('returns the input on invalid URL', () => {
+    expect(normalizeUrl('not a url')).toBe('not a url')
   })
 })
