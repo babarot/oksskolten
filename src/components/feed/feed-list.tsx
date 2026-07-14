@@ -11,6 +11,7 @@ import { useFetchProgressContext } from '../../contexts/fetch-progress-context'
 import { toast } from 'sonner'
 import { useFeedActions } from '../../hooks/use-feed-actions'
 import { useFeedDragDrop } from '../../hooks/use-feed-drag-drop'
+import { useCategoryDragDrop } from '../../hooks/use-category-drag-drop'
 import { useFeedSelection } from '../../hooks/use-feed-selection'
 import { useFeedBulkActions } from '../../hooks/use-feed-bulk-actions'
 import { useClipFeedId } from '../../hooks/use-clip-feed-id'
@@ -191,6 +192,11 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
     dragOverTarget, isDragging,
     handleDragStart, handleDragOver, handleDragLeave, handleDrop, handleDragEnd,
   } = useFeedDragDrop({ feeds, mutateFeeds, onDropComplete: clearSelection })
+
+  const {
+    isCategoryDrag,
+    handleCategoryDragStart, handleCategoryDrop, handleCategoryDragEnd,
+  } = useCategoryDragDrop({ categories, mutateCategories })
 
   const {
     bulkDeleteConfirm, setBulkDeleteConfirm,
@@ -399,9 +405,12 @@ export function FeedList({ isOpen, onClose, onBackdropClose, onCollapse, onMarkA
     return (
       <div
         key={category.id}
+        draggable={!isRenaming}
+        onDragStart={e => handleCategoryDragStart(e, category)}
+        onDragEnd={handleCategoryDragEnd}
         onDragOver={e => handleDragOver(e, category.id)}
         onDragLeave={handleDragLeave}
-        onDrop={e => handleDrop(e, category.id)}
+        onDrop={e => isCategoryDrag(e) ? void handleCategoryDrop(e, category) : handleDrop(e, category.id)}
         className={`rounded-lg transition-colors ${dragOverTarget === category.id ? 'bg-hover-sidebar' : ''}`}
       >
         <CategoryContextMenu
