@@ -158,7 +158,7 @@ export function useSettings() {
       { key: 'reading.chat_position', setter: setChatPosition, backfillRef: chatPositionRef,
         validate: v => v === 'fab' || v === 'inline' },
       { key: 'reading.article_open_mode', setter: setArticleOpenMode, backfillRef: articleOpenModeRef,
-        validate: v => v === 'page' || v === 'overlay' },
+        validate: v => v === 'page' || v === 'overlay' || v === 'split' },
       { key: 'reading.category_unread_only', setter: setCategoryUnreadOnly, backfillRef: categoryUnreadOnlyRef,
         validate: v => v === 'on' || v === 'off' },
       { key: 'appearance.list_layout', setter: setLayout, backfillRef: layoutRef,

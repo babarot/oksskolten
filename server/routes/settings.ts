@@ -70,7 +70,7 @@ const PREF_ALLOWED: Record<PrefKey, string[] | null> = {
   'reading.show_thumbnails': ['on', 'off'],
   'reading.show_feed_activity': ['on', 'off'],
   'reading.chat_position': ['fab', 'inline'],
-  'reading.article_open_mode': ['page', 'overlay'],
+  'reading.article_open_mode': ['page', 'overlay', 'split'],
   'reading.category_unread_only': ['on', 'off'],
   'reading.keyboard_navigation': ['on', 'off'],
   'reading.keybindings': null,

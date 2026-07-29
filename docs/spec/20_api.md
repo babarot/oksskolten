@@ -889,7 +889,7 @@ Unset items are `null`.
 | `reading.show_thumbnails` | `"on"` / `"off"` |
 | `reading.show_feed_activity` | `"on"` / `"off"` |
 | `reading.chat_position` | `"fab"` / `"inline"` |
-| `reading.article_open_mode` | `"page"` / `"overlay"` |
+| `reading.article_open_mode` | `"page"` / `"overlay"` / `"split"` |
 | `appearance.highlight_theme` | Any string (theme name). Empty string to delete |
 | `appearance.font_family` | Any string (font name). Empty string to delete |
 | `appearance.list_layout` | `"list"` / `"card"` / `"magazine"` / `"compact"` |

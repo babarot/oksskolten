@@ -163,6 +163,26 @@ Four layout options are available for the article list. Independent from the the
 - Hook: `src/hooks/useLayout.ts` (based on `createLocalStorageHook`)
 - Skeleton UI: Dedicated skeletons corresponding to each layout
 
+### Article Open Mode
+
+Three ways to open an article from the list. Independent from list layout.
+
+| Mode | Key | Description |
+|---|---|---|
+| Full page | `page` | Navigates to the article detail route. Default |
+| Overlay | `overlay` | Opens the article in a right-hand overlay without leaving the list |
+| Split view | `split` | Desktop three-column layout: sidebar \| article list \| detail panel. Below the `md` breakpoint (768px) — phones and narrow windows — the preference is kept but the UI falls back to **full-page** navigation (same as `page`): no side-by-side detail panel, list clicks navigate to the detail route |
+
+- Setting key: `reading.article_open_mode` (allowed values: `page` / `overlay` / `split`)
+- Settings page: Selectable with preview cards under Reading
+- Persistence: `localStorage` (instant) + DB sync via preferences PATCH
+- Hook: `src/hooks/use-article-open-mode.ts`
+- Split view extras:
+  - List panel width is draggable (200–640px, default 360px), stored as `split-panel-width` in `localStorage`
+  - Detail panel can be collapsed; state stored as `split-detail-collapsed`
+  - Clicking a list item (or j/k focus move) loads the article in the detail panel without a route change
+  - Selected row is highlighted; switching feed/section clears the selection
+
 ### PWA Support
 
 Progressive Web App support via `vite-plugin-pwa`.

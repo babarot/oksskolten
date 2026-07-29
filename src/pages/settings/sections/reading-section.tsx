@@ -275,6 +275,7 @@ export function ReadingSection() {
           {([
             { value: 'page' as const, label: t('settings.articleOpenModePage') },
             { value: 'overlay' as const, label: t('settings.articleOpenModeOverlay') },
+            { value: 'split' as const, label: t('settings.articleOpenModeSplit') },
           ]).map(option => (
             <PreviewCard
               key={option.value}
@@ -310,7 +311,7 @@ export function ReadingSection() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : option.value === 'overlay' ? (
                 <div className="w-full h-full bg-bg-card flex relative overflow-hidden">
                   {/* Background list (dimmed) */}
                   <div className="absolute inset-0 p-2 space-y-1.5 opacity-20">
@@ -331,6 +332,29 @@ export function ReadingSection() {
                     <div className="w-full h-0.5 rounded-full bg-text/8" />
                     <div className="w-3/4 h-0.5 rounded-full bg-text/8" />
                     <div className="w-full h-0.5 rounded-full bg-text/8" />
+                  </div>
+                </div>
+              ) : (
+                /* Split view preview: sidebar | list | detail */
+                <div className="w-full h-full bg-bg-card flex overflow-hidden">
+                  <div className="w-[22%] h-full border-r border-border p-1 space-y-1 shrink-0">
+                    <div className="w-full h-1 rounded-full bg-text/15" />
+                    <div className="w-full h-1 rounded-full bg-accent/40" />
+                    <div className="w-full h-1 rounded-full bg-text/15" />
+                    <div className="w-full h-1 rounded-full bg-text/15" />
+                  </div>
+                  <div className="w-[35%] h-full border-r border-border p-1 space-y-1 shrink-0">
+                    <div className="w-full h-1 rounded-full bg-text/15" />
+                    <div className="w-3/4 h-1 rounded-full bg-accent/30" />
+                    <div className="w-full h-1 rounded-full bg-text/15" />
+                    <div className="w-2/3 h-1 rounded-full bg-text/15" />
+                  </div>
+                  <div className="flex-1 h-full p-1 space-y-1">
+                    <div className="w-full h-2 rounded-sm bg-text/20" />
+                    <div className="w-2/3 h-0.5 rounded-full bg-muted/20 mt-0.5" />
+                    <div className="w-full h-0.5 rounded-full bg-text/8 mt-1" />
+                    <div className="w-full h-0.5 rounded-full bg-text/8" />
+                    <div className="w-3/4 h-0.5 rounded-full bg-text/8" />
                   </div>
                 </div>
               )}
