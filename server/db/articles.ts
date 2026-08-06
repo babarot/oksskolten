@@ -1,4 +1,5 @@
 import { getDb, runNamed, getNamed, allNamed } from './connection.js'
+import { updateArticleLabelsInTransaction } from './labels.js'
 import type { Article, ArticleListItem, ArticleDetail } from './types.js'
 import type { MeiliArticleDoc } from '../search/client.js'
 import { syncArticleToSearch, deleteArticleFromSearch, deleteArticlesFromSearch, syncArticleScoreToSearch, syncArticleFiltersToSearch } from '../search/sync.js'
@@ -371,24 +372,29 @@ export function insertArticle(data: {
   og_image?: string | null
   last_error?: string | null
 }): number {
-  const info = runNamed(`
-    INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
-    VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
-  `, {
-    feed_id: data.feed_id,
-    title: data.title,
-    url: data.url,
-    published_at: data.published_at,
-    lang: data.lang ?? null,
-    full_text: data.full_text ?? null,
-    full_text_translated: data.full_text_translated ?? null,
-    translated_lang: data.translated_lang ?? null,
-    summary: data.summary ?? null,
-    excerpt: data.excerpt ?? null,
-    og_image: data.og_image ?? null,
-    last_error: data.last_error ?? null,
-  })
-  const articleId = info.lastInsertRowid as number
+  const db = getDb()
+  const articleId = db.transaction(() => {
+    const info = runNamed(`
+      INSERT INTO articles (feed_id, category_id, title, url, published_at, lang, full_text, full_text_translated, translated_lang, summary, excerpt, og_image, last_error)
+      VALUES (@feed_id, (SELECT category_id FROM feeds WHERE id = @feed_id), @title, @url, @published_at, @lang, @full_text, @full_text_translated, @translated_lang, @summary, @excerpt, @og_image, @last_error)
+    `, {
+      feed_id: data.feed_id,
+      title: data.title,
+      url: data.url,
+      published_at: data.published_at,
+      lang: data.lang ?? null,
+      full_text: data.full_text ?? null,
+      full_text_translated: data.full_text_translated ?? null,
+      translated_lang: data.translated_lang ?? null,
+      summary: data.summary ?? null,
+      excerpt: data.excerpt ?? null,
+      og_image: data.og_image ?? null,
+      last_error: data.last_error ?? null,
+    })
+    const id = info.lastInsertRowid as number
+    updateArticleLabelsInTransaction(id)
+    return id
+  })()
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
   return articleId
@@ -430,7 +436,11 @@ export function updateArticleContent(
     }
   }
   if (fields.length === 0) return
-  runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id`, params)
+  const db = getDb()
+  db.transaction(() => {
+    runNamed(`UPDATE articles SET ${fields.join(', ')} WHERE id = @id`, params)
+    if (data.full_text !== undefined) updateArticleLabelsInTransaction(articleId)
+  })()
   const doc = buildMeiliDoc(articleId)
   if (doc) syncArticleToSearch(doc)
 }

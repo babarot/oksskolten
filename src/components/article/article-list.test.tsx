@@ -17,12 +17,13 @@ let swrInfiniteReturn: any = {
   isValidating: false,
   mutate: vi.fn(),
 }
+let swrInfiniteKey: ((pageIndex: number, previousPageData: any) => string | null) | undefined
 
 // Control useSWR return value for /api/feeds
 let swrFeedsData: any = undefined
 
 vi.mock('swr/infinite', () => ({
-  default: () => swrInfiniteReturn,
+  default: (key: typeof swrInfiniteKey) => { swrInfiniteKey = key; return swrInfiniteReturn },
 }))
 
 vi.mock('swr', async () => {
@@ -155,6 +156,8 @@ const mockSettings = {
   setShowThumbnails: vi.fn(),
   showFeedActivity: 'on' as const,
   setShowFeedActivity: vi.fn(),
+  labelUnreadOnly: 'off' as const,
+  setLabelUnreadOnly: vi.fn(),
   highlightTheme: 'github-dark' as const,
   setHighlightTheme: vi.fn(),
   articleFont: 'sans' as const,
@@ -177,6 +180,7 @@ function renderArticleList(initialPath = '/inbox') {
         <Routes>
           <Route element={<OutletWrapper />}>
             <Route path="feeds/:feedId" element={<ArticleList />} />
+            <Route path="labels/:labelId" element={<ArticleList />} />
             <Route path="*" element={<ArticleList />} />
           </Route>
         </Routes>
@@ -189,6 +193,7 @@ describe('ArticleList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     swrFeedsData = undefined
+    swrInfiniteKey = undefined
     mockSettings.autoMarkRead = 'off' as any
     // Stub IntersectionObserver for tests that enable autoMarkRead
     vi.stubGlobal('IntersectionObserver', class {
@@ -214,6 +219,12 @@ describe('ArticleList', () => {
     // Skeleton renders divs with animate-pulse class
     const pulses = document.querySelectorAll('.animate-pulse')
     expect(pulses.length).toBeGreaterThan(0)
+  })
+
+  it('requests unread label articles with label pagination', () => {
+    mockSettings.labelUnreadOnly = 'on' as any
+    renderArticleList('/labels/42')
+    expect(swrInfiniteKey?.(0, null)).toBe('/api/labels/42/articles?unread=1&limit=20&offset=0')
   })
 
   it('shows empty state when no articles', () => {

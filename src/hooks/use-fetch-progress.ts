@@ -58,6 +58,8 @@ export function useFetchProgress() {
       typeof key === 'string' && key.includes('/api/feeds'))
     void globalMutate((key: unknown) =>
       typeof key === 'string' && key.includes('/api/articles'))
+    void globalMutate((key: unknown) =>
+      typeof key === 'string' && key.startsWith('/api/labels'))
   }, [globalMutate])
 
   const startFeedFetch = useCallback(async (feedId: number): Promise<FetchResult> => {

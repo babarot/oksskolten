@@ -9,6 +9,7 @@ import { GitHubOAuthSettings } from '../components/settings/github-oauth-setting
 import { ApiTokenSettings } from '../components/settings/api-token-settings'
 import { ImageStorageSettings } from '../components/settings/image-storage-settings'
 import { GeneralTab } from './settings/general-tab'
+import { LabelsSection } from './settings/sections/labels-section'
 const AppearanceTab = lazy(() => import('./settings/appearance-tab').then(m => ({ default: m.AppearanceTab })))
 import { IntegrationTab } from './settings/integration-tab'
 import { DataTab } from './settings/data-tab'
@@ -16,7 +17,7 @@ import { Separator } from '@/components/ui/separator'
 
 declare const __APP_VERSION__: string
 
-const TABS = ['general', 'appearance', 'integration', 'plugins', 'security', 'data', 'viewer', 'about'] as const
+const TABS = ['general', 'labels', 'appearance', 'integration', 'plugins', 'security', 'data', 'viewer', 'about'] as const
 
 export function SettingsPage() {
   const { tab: tabParam } = useParams<{ tab?: string }>()
@@ -73,6 +74,8 @@ export function SettingsPage() {
           {tab === 'general' && (
             <GeneralTab />
           )}
+
+          {tab === 'labels' && <LabelsSection />}
 
           {tab === 'data' && (
             <DataTab />

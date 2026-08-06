@@ -46,6 +46,19 @@ describe('useFetchProgress', () => {
     expect(result.current.progress.size).toBe(0)
   })
 
+  it('invalidates label caches after fetch completion', async () => {
+    vi.stubGlobal('fetch', mockSSEFetch([]))
+    const { result } = renderHook(() => useFetchProgress())
+
+    await act(async () => {
+      await result.current.startFeedFetch(42)
+    })
+
+    const predicates = mockGlobalMutate.mock.calls.map(([predicate]) => predicate)
+    expect(predicates.some((predicate: (key: string) => boolean) => predicate('/api/labels'))).toBe(true)
+    expect(predicates.some((predicate: (key: string) => boolean) => predicate('/api/labels/7/articles?unread=1'))).toBe(true)
+  })
+
   describe('startFeedFetch', () => {
     it('fetches single feed and cleans up', async () => {
       vi.stubGlobal('fetch', mockSSEFetch([

@@ -123,7 +123,7 @@ export function useAppLayout() {
 }
 
 function ArticleListPage() {
-  const { feedId, categoryId } = useParams<{ feedId?: string; categoryId?: string }>()
+  const { feedId, categoryId, labelId } = useParams<{ feedId?: string; categoryId?: string; labelId?: string }>()
   const location = useLocation()
   const { t } = useI18n()
   const isInbox = location.pathname === '/inbox'
@@ -133,6 +133,7 @@ function ArticleListPage() {
   const isClips = location.pathname === '/clips'
   const { data: feedsData } = useSWR<{ feeds: Array<{ id: number; name: string; type: string; category_id: number | null; category_name: string | null }>; clip_feed_id: number | null }>('/api/feeds', fetcher)
   const { data: categoriesData } = useSWR<{ categories: Array<{ id: number; name: string }> }>('/api/categories', fetcher)
+  const { data: labelData } = useSWR<{ id: number; name: string }>(labelId ? `/api/labels/${labelId}` : null, fetcher)
 
   const headerName = isHistory
     ? t('feeds.history')
@@ -148,7 +149,9 @@ function ArticleListPage() {
           ? feedsData?.feeds.find(f => f.id === Number(feedId))?.name ?? null
           : categoryId
             ? categoriesData?.categories.find(c => c.id === Number(categoryId))?.name ?? null
-            : null
+            : labelId
+              ? labelData?.name ?? null
+              : null
 
   const articleListRef = useRef<ArticleListHandle>(null)
   const revalidateArticles = useCallback(() => articleListRef.current?.revalidate(), [])
@@ -243,7 +246,7 @@ function ArticleDetailPage() {
 
 // Determine the "page type" for animation decisions
 function getPageType(pathname: string): 'detail' | 'list' {
-  if (pathname === '/' || pathname === '/inbox' || pathname === '/bookmarks' || pathname === '/likes' || pathname === '/history' || pathname === '/clips' || pathname.startsWith('/feeds/') || pathname.startsWith('/categories/') || pathname.startsWith('/settings') || pathname.startsWith('/chat')) {
+  if (pathname === '/' || pathname === '/inbox' || pathname === '/bookmarks' || pathname === '/likes' || pathname === '/history' || pathname === '/clips' || pathname.startsWith('/feeds/') || pathname.startsWith('/categories/') || pathname.startsWith('/labels/') || pathname.startsWith('/settings') || pathname.startsWith('/chat')) {
     return 'list'
   }
   return 'detail'
@@ -322,6 +325,7 @@ function AnimatedRoutes() {
             <Route path="/clips" element={<ArticleListPage />} />
             <Route path="/feeds/:feedId" element={<ArticleListPage />} />
             <Route path="/categories/:categoryId" element={<ArticleListPage />} />
+            <Route path="/labels/:labelId" element={<ArticleListPage />} />
             <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
             <Route path="/settings/:tab" element={<SettingsPageWrapper />} />
             <Route path="/chat" element={<ChatPageWrapper />} />

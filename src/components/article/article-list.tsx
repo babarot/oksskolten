@@ -47,7 +47,7 @@ export interface ArticleListHandle {
 export const ArticleList = forwardRef<ArticleListHandle, object>(function ArticleList(_props, ref) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { feedId: feedIdParam, categoryId: categoryIdParam } = useParams<{ feedId?: string; categoryId?: string }>()
+  const { feedId: feedIdParam, categoryId: categoryIdParam, labelId: labelIdParam } = useParams<{ feedId?: string; categoryId?: string; labelId?: string }>()
   const { settings } = useAppLayout()
   const clipFeedId = useClipFeedId()
 
@@ -62,13 +62,15 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const feedId = feedIdParam ? Number(feedIdParam) : (isClips && clipFeedId ? clipFeedId : undefined)
   const currentFeed = feedId && feedsData ? feedsData.feeds.find(f => f.id === feedId) : undefined
   const categoryId = categoryIdParam ? Number(categoryIdParam) : undefined
+  const labelId = labelIdParam ? Number(labelIdParam) : undefined
+  const isLabel = !!labelId
   const [showReadArticles, setShowReadArticles] = useState(false)
   const categoryUnreadOnly = !!categoryId && settings.categoryUnreadOnly === 'on'
   const unreadOnly = isInbox || (categoryUnreadOnly && !showReadArticles)
   const bookmarkedOnly = isBookmarks
   const likedOnly = isLikes
   const readOnly = isHistory
-  const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation, keybindings } = settings
+  const { autoMarkRead, dateMode, indicatorStyle, layout, articleOpenMode, keyboardNavigation, keybindings, labelUnreadOnly } = settings
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null)
   const [noFloor, setNoFloor] = useState(false)
   const displayConfig: ArticleDisplayConfig = useMemo(() => ({
@@ -83,6 +85,13 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   const { mutate: globalMutate } = useSWRConfig()
   const getKey = (pageIndex: number, previousPageData: ArticlesResponse | null) => {
     if (previousPageData && !previousPageData.has_more) return null
+    if (isLabel && labelId) {
+      const params = new URLSearchParams()
+      if (labelUnreadOnly === 'on') params.set('unread', '1')
+      params.set('limit', String(PAGE_SIZE))
+      params.set('offset', String(pageIndex * PAGE_SIZE))
+      return `/api/labels/${labelId}/articles?${params.toString()}`
+    }
     const params = new URLSearchParams()
     if (feedId) params.set('feed_id', String(feedId))
     if (categoryId) params.set('category_id', String(categoryId))
@@ -280,7 +289,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
     batchQueue.current.clear()
     markSeenOnServer(ids)
       .then(() => globalMutate(
-        (key: string) => typeof key === 'string' && key.startsWith('/api/feeds'),
+        (key: string) => typeof key === 'string' && (key.startsWith('/api/feeds') || key.startsWith('/api/labels')),
       ))
       .catch(() => {})
   }, [globalMutate])
@@ -395,18 +404,18 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
       }
       flushBatch()
     }
-  }, [feedId, categoryId, flushBatch])
+  }, [feedId, categoryId, labelId, flushBatch])
 
-  // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category changes
+  // Reset autoReadIds, noFloor, showReadArticles, and keyboard focus when feed/category/label changes
   useEffect(() => {
     setAutoReadIds(new Set())
     setNoFloor(false)
     setShowReadArticles(false)
     setFocusedItemId(null)
-  }, [feedId, categoryId, setFocusedItemId])
+  }, [feedId, categoryId, labelId, setFocusedItemId])
 
   return (
-    <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
+    <main ref={listRef} className={labelId ? undefined : 'max-w-2xl mx-auto'} role={!isGridLayout ? 'listbox' : undefined}>
       {isTouchDevice && <PullToRefresh onRefresh={async () => {
         if (feedId) {
           const result = await startFeedFetch(feedId)

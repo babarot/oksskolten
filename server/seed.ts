@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDb } from './db/connection.js'
+import { rebuildAllLabelMemberships } from './db/labels.js'
 import { logger } from './logger.js'
 
 const log = logger.child('seed')
@@ -109,6 +110,10 @@ export function seedDevData() {
       )
     }
   })()
+
+  // Seed articles are inserted directly for speed, so maintain materialized
+  // label membership after the seed transaction completes.
+  rebuildAllLabelMemberships()
 
   const feedCount = feedsJson.length
   const articleCount = articlesJson.length
