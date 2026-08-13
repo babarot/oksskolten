@@ -49,6 +49,7 @@ function buildTranslatePrompt(fullText: string): string {
 Translate every word faithfully — do not summarize, compress, or omit anything.
 The translation must be 1:1 with the original text in volume.
 Preserve Markdown formatting. In particular, keep blockquote lines starting with ">".
+Output ONLY the ${targetLang} translation. Do not include the original text or any commentary.
 
 --- Article body ---
 ${fullText}`
