@@ -5,6 +5,7 @@ import Database from 'libsql'
 import { logger } from '../logger.js'
 import { dataPath } from '../paths.js'
 import { findProjectRoot } from '../paths.js'
+import { normalizeUrl } from '../../shared/url.js'
 
 const log = logger.child('db')
 
@@ -170,5 +171,46 @@ export function runMigrations() {
     if (!remote) db.pragma('foreign_keys = ON')
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file)
     log.info(`Migration applied: ${file}`)
+  }
+
+  // TS data migration: canonicalize legacy article URLs (#102 consecutive slashes, #116 percent-hex case).
+  // Runs once, tracked in _migrations for idempotency like the .sql migrations, but uses the shared
+  // normalizeUrl() so the SQL layer and the app's canonical form never drift.
+  //
+  // Legacy data can hold the *same article* under two URL spellings (e.g. `//kiji/a` and `/kiji/a`
+  // fetched at different times), and articles.url is UNIQUE. Normalizing such a collision violates the
+  // constraint, so we first dedupe: for each URL that collapses onto the same canonical form, keep the
+  // row with the smallest id and delete the others, then rewrite the surviving URL to the canonical form.
+  const URL_NORM = 'url_normalize_v1'
+  if (!applied.has(URL_NORM) && !remote) {
+    const rows = db.prepare('SELECT id, url FROM articles').all() as { id: number; url: string }[]
+    // Group by canonical url -> keep smallest id, drop the rest.
+    const keep = new Map<string, number>() // canonical -> id to keep
+    const drop: number[] = []
+    for (const row of rows) {
+      const canonical = normalizeUrl(row.url)
+      const existing = keep.get(canonical)
+      if (existing === undefined) {
+        keep.set(canonical, row.id)
+      } else if (row.id < existing) {
+        // A smaller id arrived for this canonical; keep it instead
+        drop.push(existing)
+        keep.set(canonical, row.id)
+      } else {
+        drop.push(row.id)
+      }
+    }
+    const del = db.prepare('DELETE FROM articles WHERE id = ?')
+    const update = db.prepare('UPDATE articles SET url = ? WHERE id = ?')
+    const tx = db.transaction(() => {
+      for (const id of drop) del.run(id)
+      for (const [canonical, id] of keep) {
+        const raw = rows.find(r => r.id === id)?.url
+        if (raw !== undefined && raw !== canonical) update.run(canonical, id)
+      }
+    })
+    tx()
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(URL_NORM)
+    log.info(`Migration ${URL_NORM}: deduped ${drop.length} row(s), kept ${keep.size} canonical URL(s)`)
   }
 }

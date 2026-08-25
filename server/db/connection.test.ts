@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setupTestDb } from '../__tests__/helpers/testDb.js'
 import { bindNamedParams, runNamed, getNamed, allNamed, getDb, runMigrations } from './connection.js'
+import { createFeed } from './feeds.js'
 
 beforeEach(() => {
   setupTestDb()
@@ -93,6 +94,48 @@ describe('runMigrations', () => {
   it('records applied migrations', () => {
     const applied = getDb().prepare('SELECT name FROM _migrations').all() as { name: string }[]
     expect(applied.length).toBeGreaterThan(0)
+  })
+
+  it('url_normalize_v1 canonicalizes legacy article URLs (consecutive slashes, lowercase percent-hex)', () => {
+    // Reproduce a legacy DB: fresh schema + migrations applied, then LEGACY non-canonical URLs
+    // inserted directly (bypassing insertArticle, which now normalizes on save).
+    const feed = createFeed({ name: 'X', url: 'https://x.example' })
+    const db = getDb()
+    db.prepare(
+      "INSERT INTO articles (feed_id, category_id, title, url, published_at) VALUES (?, NULL, 'a', 'https://x.example//kiji/horai', '2025-01-01T00:00:00Z')"
+    ).run(feed.id)
+    db.prepare(
+      "INSERT INTO articles (feed_id, category_id, title, url, published_at) VALUES (?, NULL, 'b', 'https://x.example/%e8%a8%98', '2025-01-01T00:00:00Z')"
+    ).run(feed.id)
+
+    // Pretend the URL normalization migration hasn't run yet, then run it.
+    db.prepare("DELETE FROM _migrations WHERE name = 'url_normalize_v1'").run()
+    runMigrations()
+
+    const urls = (db.prepare('SELECT url FROM articles ORDER BY id').all() as { url: string }[]).map(r => r.url)
+    expect(urls).toContain('https://x.example/kiji/horai')        // // collapsed
+    expect(urls).toContain('https://x.example/%E8%A8%98')          // percent-hex uppercased
+    // Idempotent: running again doesn't throw or duplicate.
+    expect(() => runMigrations()).not.toThrow()
+  })
+
+  it('url_normalize_v1 dedupes rows that collapse onto the same canonical URL', () => {
+    const feed = createFeed({ name: 'X', url: 'https://x.example' })
+    const db = getDb()
+    // Same article stored under two spellings (a pre-existing duplicate in legacy DB).
+    db.prepare(
+      "INSERT INTO articles (feed_id, category_id, title, url, published_at) VALUES (?, NULL, 'legacy-//','https://x.example//kiji/a', '2025-01-01T00:00:00Z')"
+    ).run(feed.id)
+    db.prepare(
+      "INSERT INTO articles (feed_id, category_id, title, url, published_at) VALUES (?, NULL, 'legacy-/','https://x.example/kiji/a', '2025-01-01T00:00:00Z')"
+    ).run(feed.id)
+
+    db.prepare("DELETE FROM _migrations WHERE name = 'url_normalize_v1'").run()
+    // Should not throw on the UNIQUE(url) collision: it keeps one row and drops the other.
+    expect(() => runMigrations()).not.toThrow()
+
+    const rows = db.prepare("SELECT url FROM articles WHERE url = 'https://x.example/kiji/a'").all() as { url: string }[]
+    expect(rows).toHaveLength(1) // exactly one survives
   })
 })
 
