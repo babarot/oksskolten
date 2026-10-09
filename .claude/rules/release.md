@@ -13,8 +13,8 @@ paths:
 
 1. **tagpr** creates a release PR automatically when changes land on `main`
 2. Version bump is determined by PR labels:
-   - `release/major` or `kind/breaking-change` → major
-   - `release/minor`, `kind/feature`, or `kind/deprecation` → minor
+   - `kind/breaking-change` → major
+   - `kind/feature` or `kind/deprecation` → minor
    - Everything else → patch
 3. tagpr updates `CHANGELOG.md` and `package.json` version, then creates a git tag on merge
 4. The publish workflow (`.github/workflows/publish.yaml`) builds and pushes the Docker image on tag push
