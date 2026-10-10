@@ -18,6 +18,7 @@ import { registerChatApi } from './chatRoutes.js'
 import { authRoutes } from './authRoutes.js'
 import { passkeyRoutes } from './passkeyRoutes.js'
 import { oauthRoutes } from './oauthRoutes.js'
+import { feverRoutes } from './routes/fever.js'
 import { fetchAllFeeds } from './fetcher.js'
 import { ensureSearchIndex, rebuildSearchIndex, isSearchReady, syncAllScoredArticlesToSearch } from './search/sync.js'
 
@@ -131,6 +132,7 @@ app.get('/api/health', async (_req, reply) => {
 app.register(authRoutes)
 app.register(passkeyRoutes)
 app.register(oauthRoutes)
+app.register(feverRoutes)
 
 // Protected API routes
 registerApi(app)
