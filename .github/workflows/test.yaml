@@ -32,6 +32,8 @@ jobs:
         with:
           filters: |
             server:
+              - 'mise.toml'
+              - '.github/workflows/test.yaml'
               - 'server/**'
               - 'shared/**'
               - 'package.json'
@@ -40,12 +42,16 @@ jobs:
               - 'vitest.config.ts'
               - 'eslint.config.js'
             docs:
+              - 'mise.toml'
+              - '.github/workflows/test.yaml'
               - 'docs/spec/**'
               - 'docs/guides/**'
               - 'docs/adr/**'
               - 'policy/**'
               - 'scripts/lint-docs.sh'
             client:
+              - 'mise.toml'
+              - '.github/workflows/test.yaml'
               - 'src/**'
               - 'shared/**'
               - 'vite.config.ts'
