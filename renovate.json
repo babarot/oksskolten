@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "dependencyDashboard": false,
+  "timezone": "Asia/Tokyo",
+  "schedule": ["before 9am on monday"],
+  "minimumReleaseAge": "7 days",
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "groupName": "npm updates",
+      "separateMajorMinor": false
+    },
+    {
+      "description": "The images are pinned by digest, so a single weekly PR bumps them together",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "groupName": "docker updates",
+      "separateMajorMinor": false
+    },
+    {
+      "description": "Renovate gets release timestamps for images from Docker Hub only, so without this an image on ghcr.io never passes minimumReleaseAge",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/**"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    }
+  ]
+}

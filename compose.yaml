@@ -66,7 +66,7 @@ services:
       - internal
 
   meilisearch:
-    image: getmeili/meilisearch:v1.13
+    image: getmeili/meilisearch:v1.13.3@sha256:bed3fb650e62da53145777204891159242f6ea4ce69e215b36223af4aa64a0ae
     restart: unless-stopped
     environment:
       MEILI_DB_PATH: /meili_data
@@ -84,7 +84,7 @@ services:
       - internal
 
   rss-bridge:
-    image: rssbridge/rss-bridge:latest
+    build: docker/rss-bridge
     restart: unless-stopped
     ports:
       - "8080:80"
@@ -92,7 +92,7 @@ services:
       - internal
 
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    build: docker/flaresolverr
     restart: unless-stopped
     environment:
       LOG_LEVEL: info
