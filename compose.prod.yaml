@@ -33,7 +33,7 @@ services:
       replicas: 0
 
   cloudflared:
-    image: cloudflare/cloudflared
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
