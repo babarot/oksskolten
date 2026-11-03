@@ -5,7 +5,7 @@ import rego.v1
 
 import data.adrlib
 
-deny contains {"rule": "ADR014", "path": doc.path, "line": l.line, "message": msg} if {
+deny contains {"rule": "broken-link", "path": doc.path, "line": l.line, "message": msg} if {
 	some doc in input.documents
 	adrlib.accepted(doc)
 	some l in doc.links

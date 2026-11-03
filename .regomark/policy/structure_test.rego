@@ -5,8 +5,25 @@ import rego.v1
 import data.adr
 
 test_schema if {
-	adr.schema_version == 1
-	adr.rule_ids == {sprintf("ADR%03d", [n]) | some n in numbers.range(1, 14)}
+	adr.schema_version == 2
+	adr.rule_ids == {
+		"file-name",
+		"title",
+		"required-sections",
+		"section-order",
+		"status-paragraph",
+		"status-value",
+		"status-lines",
+		"reference-placement",
+		"reference-target",
+		"reference-direction",
+		"duplicate-number",
+		"number-sequence",
+		"replacement-cycle",
+		"broken-link",
+		"spec-detail",
+		"procedure",
+	}
 }
 
 test_clean_set if {
@@ -18,36 +35,36 @@ test_clean_set if {
 	])) == 0
 }
 
-# ADR001
+# file-name
 
 test_adr001_kebab_case if {
-	not "ADR001" in rules_of([valid(1, "Accepted")])
-	not "ADR001" in rules_of([document("001-a-b-2.md", adr_blocks(1, "Accepted"), [])])
+	not "file-name" in rules_of([valid(1, "Accepted")])
+	not "file-name" in rules_of([document("001-a-b-2.md", adr_blocks(1, "Accepted"), [])])
 }
 
 test_adr001_bad_names if {
 	bad := ["1-title.md", "001_title.md", "001-Title.md", "001-title-.md", "001-title.markdown", "0001-title.md"]
 	every name in bad {
-		["ADR001", $"docs/adr/{name}", 1] in hits([document(name, adr_blocks(1, "Accepted"), [])])
+		["file-name", $"docs/adr/{name}", 1] in hits([document(name, adr_blocks(1, "Accepted"), [])])
 	}
 }
 
-# ADR002
+# title
 
 test_adr002_one_matching_h1 if {
-	not "ADR002" in rules_of([valid(1, "Accepted")])
+	not "title" in rules_of([valid(1, "Accepted")])
 }
 
 test_adr002_no_h1 if {
 	blocks := array.slice(adr_blocks(1, "Accepted"), 1, 9)
 	h := hits([document(name_of(1), blocks, [])])
-	["ADR002", path_of(1), 1] in h
-	messages_of([document(name_of(1), blocks, [])], "ADR002") == {"an ADR has exactly one H1, found 0"}
+	["title", path_of(1), 1] in h
+	messages_of([document(name_of(1), blocks, [])], "title") == {"an ADR has exactly one H1, found 0"}
 }
 
 test_adr002_two_h1 if {
 	doc := document(name_of(1), array.concat(adr_blocks(1, "Accepted"), [heading(40, 1, "ADR-001: Again")]), [])
-	messages_of([doc], "ADR002") == {"an ADR has exactly one H1, found 2"}
+	messages_of([doc], "title") == {"an ADR has exactly one H1, found 2"}
 }
 
 with_h1(n, text) := document(name_of(n), blocks, []) if {
@@ -56,25 +73,25 @@ with_h1(n, text) := document(name_of(n), blocks, []) if {
 
 test_adr002_number_mismatch if {
 	doc := with_h1(1, "ADR-002: Title")
-	hits([doc]) == {["ADR002", path_of(1), 1]}
-	messages_of([doc], "ADR002") == {"the H1 must be \"ADR-001: Title\""}
+	hits([doc]) == {["title", path_of(1), 1]}
+	messages_of([doc], "title") == {"the H1 must be \"ADR-001: Title\""}
 }
 
 test_adr002_no_title if {
 	doc := with_h1(1, "ADR-001:")
-	"ADR002" in rules_of([doc])
+	"title" in rules_of([doc])
 }
 
-# ADR003
+# required-sections
 
 test_adr003_all_sections if {
-	not "ADR003" in rules_of([valid(1, "Accepted")])
+	not "required-sections" in rules_of([valid(1, "Accepted")])
 }
 
 test_adr003_missing_section if {
 	blocks := [b | some b in adr_blocks(1, "Accepted"); b.text != "Context"]
-	hits([document(name_of(1), blocks, [])]) == {["ADR003", path_of(1), 1]}
-	messages_of([document(name_of(1), blocks, [])], "ADR003") == {"missing \"## Context\""}
+	hits([document(name_of(1), blocks, [])]) == {["required-sections", path_of(1), 1]}
+	messages_of([document(name_of(1), blocks, [])], "required-sections") == {"missing \"## Context\""}
 }
 
 test_adr003_rejected_with_the_four_sections if {
@@ -98,11 +115,11 @@ test_adr003_rejected_with_other_headings if {
 		],
 		[],
 	)
-	hits([doc]) == {["ADR003", path_of(1), 1]}
-	messages_of([doc], "ADR003") == {"missing \"## Decision\"", "missing \"## Consequences\""}
+	hits([doc]) == {["required-sections", path_of(1), 1]}
+	messages_of([doc], "required-sections") == {"missing \"## Decision\"", "missing \"## Consequences\""}
 }
 
-# ADR004
+# section-order
 
 test_adr004_in_order_with_others_between if {
 	blocks := adr_blocks(1, "Accepted")
@@ -127,6 +144,6 @@ test_adr004_out_of_order if {
 		],
 		[],
 	)
-	hits([doc]) == {["ADR004", path_of(1), 9]}
-	messages_of([doc], "ADR004") == {"\"## Context\" must come before \"## Decision\""}
+	hits([doc]) == {["section-order", path_of(1), 9]}
+	messages_of([doc], "section-order") == {"\"## Context\" must come before \"## Decision\""}
 }

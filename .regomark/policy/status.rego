@@ -7,7 +7,7 @@ import data.adrlib
 
 allowed_status := {"Accepted", "Rejected", "Deprecated"}
 
-deny contains {"rule": "ADR005", "path": doc.path, "line": h.line, "message": msg} if {
+deny contains {"rule": "status-paragraph", "path": doc.path, "line": h.line, "message": msg} if {
 	msg := "the first block under Status must be a paragraph with the status"
 	some doc in input.documents
 	some h in adrlib.headings(doc, 2)
@@ -15,7 +15,7 @@ deny contains {"rule": "ADR005", "path": doc.path, "line": h.line, "message": ms
 	not adrlib.status_paragraph(doc)
 }
 
-deny contains {"rule": "ADR006", "path": doc.path, "line": adrlib.status_paragraph(doc).line, "message": msg} if {
+deny contains {"rule": "status-value", "path": doc.path, "line": adrlib.status_paragraph(doc).line, "message": msg} if {
 	some doc in input.documents
 	s := adrlib.status(doc)
 	not s in allowed_status
@@ -23,16 +23,17 @@ deny contains {"rule": "ADR006", "path": doc.path, "line": adrlib.status_paragra
 	msg := $"Status \"{s}\" must be Accepted, Rejected, Deprecated or \"Superseded by ADR-NNN\""
 }
 
-deny contains {"rule": "ADR007", "path": doc.path, "line": adrlib.status_paragraph(doc).line + i, "message": msg} if {
+deny contains {"rule": "status-lines", "path": doc.path, "line": line, "message": msg} if {
 	some doc in input.documents
 	some i, l in adrlib.status_lines(doc)
 	i > 0
 	not regex.match(`^Partly replaced by ADR-\d{3}\.?$`, l)
+	line := adrlib.status_paragraph(doc).line + i
 	msg := $"only \"Partly replaced by ADR-NNN\" lines may follow the status in its paragraph, found \"{l}\""
 }
 
 # A code block reports the line of its opening fence.
-deny contains {"rule": "ADR008", "path": doc.path, "line": b.line + i, "message": msg} if {
+deny contains {"rule": "reference-placement", "path": doc.path, "line": b.line + i, "message": msg} if {
 	msg := "a reference to another ADR belongs in the first paragraph under Status, where it is read"
 	some doc in input.documents
 	blocks := adrlib.section(doc, "Status")
