@@ -52,10 +52,34 @@ with_status_blocks(n, status, extra) := document(
 	[],
 )
 
-# The one place that sets input, so that each test states only its documents.
-deny_of(docs) := result if {
-	result := adr.deny with input as {"schema_version": 1, "root": ".", "documents": docs}
+# The one place that sets input, so that each test states only its documents
+# (and, for the policies that read them, the judgments).
+input_of(docs, judgments) := {"schema_version": 2, "root": ".", "documents": docs, "judgments": judgments}
+
+deny_of(docs) := deny_with(docs, [])
+
+deny_with(docs, judgments) := result if {
+	result := adr.deny with input as input_of(docs, judgments)
 }
+
+questions_of(docs) := result if {
+	result := adr.questions with input as input_of(docs, [])
+}
+
+warn_of(docs, judgments) := result if {
+	result := adr.warn with input as input_of(docs, judgments)
+}
+
+# An answer to the question id about the ADR numbered 1, asked at its
+# Decision heading (line 25).
+judgment(id, status, verdict, evidence_line) := {
+	"id": id, "path": path_of(1), "line": 25, "status": status,
+	"verdict": verdict, "reason": "It names the function.", "evidence_line": evidence_line, "error": "",
+}
+
+warn_hits(docs, judgments) := {[v.rule, v.path, v.line] | some v in warn_of(docs, judgments)}
+
+warn_messages(docs, judgments) := {v.message | some v in warn_of(docs, judgments)}
 
 # The violations as [rule, path, line].
 hits(docs) := {[v.rule, v.path, v.line] | some v in deny_of(docs)}

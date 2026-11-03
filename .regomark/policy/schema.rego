@@ -6,9 +6,23 @@ package adr
 
 import rego.v1
 
-schema_version := 1
+schema_version := 2
 
 rule_ids := {
-	"ADR001", "ADR002", "ADR003", "ADR004", "ADR005", "ADR006", "ADR007",
-	"ADR008", "ADR009", "ADR010", "ADR011", "ADR012", "ADR013", "ADR014",
+	"file-name",
+	"title",
+	"required-sections",
+	"section-order",
+	"status-paragraph",
+	"status-value",
+	"status-lines",
+	"reference-placement",
+	"reference-target",
+	"reference-direction",
+	"duplicate-number",
+	"number-sequence",
+	"replacement-cycle",
+	"broken-link",
+	"spec-detail",
+	"procedure",
 }

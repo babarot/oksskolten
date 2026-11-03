@@ -27,7 +27,7 @@ jobs:
           version: 2026.9.18
           install: false
       - name: Check the ADRs
-        run: mise x github:babarot/regomark@0.1.1 -- regomark check --format github
+        run: mise x github:babarot/regomark@0.2.0 -- regomark check --format github
         env:
           # mise-action does not pass its token on, and unauthenticated
           # GitHub API calls hit the rate limit on shared runners

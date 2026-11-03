@@ -4,7 +4,7 @@ import rego.v1
 
 with_links(n, status, links) := document(name_of(n), adr_blocks(n, status), links)
 
-# ADR014
+# broken-link
 
 test_adr014_resolved_links if {
 	doc := with_links(1, "Accepted", [
@@ -18,18 +18,18 @@ test_adr014_resolved_links if {
 
 test_adr014_missing_link if {
 	doc := with_links(1, "Accepted", [link(27, "../../gone.go", "gone.go", "missing")])
-	hits([doc]) == {["ADR014", path_of(1), 27]}
-	messages_of([doc], "ADR014") == {"link to \"../../gone.go\", which is not in the repository"}
+	hits([doc]) == {["broken-link", path_of(1), 27]}
+	messages_of([doc], "broken-link") == {"link to \"../../gone.go\", which is not in the repository"}
 }
 
 test_adr014_outside_link if {
 	doc := with_links(1, "Accepted", [link(31, "../../../x.md", "", "outside")])
-	messages_of([doc], "ADR014") == {"link to \"../../../x.md\", which is outside the repository"}
+	messages_of([doc], "broken-link") == {"link to \"../../../x.md\", which is outside the repository"}
 }
 
 test_adr014_partly_replaced_is_accepted if {
 	doc := with_links(1, "Accepted\nPartly replaced by ADR-002", [link(27, "gone.md", "docs/adr/gone.md", "missing")])
-	hits([doc, valid(2, "Accepted")]) == {["ADR014", path_of(1), 27]}
+	hits([doc, valid(2, "Accepted")]) == {["broken-link", path_of(1), 27]}
 }
 
 test_adr014_not_accepted if {

@@ -15,27 +15,27 @@ replacement_graph[doc.path] := {d.path | some r in adrlib.refs(doc); some d in n
 	some doc in input.documents
 }
 
-deny contains {"rule": "ADR009", "path": doc.path, "line": r.line, "message": msg} if {
+deny contains {"rule": "reference-target", "path": doc.path, "line": r.line, "message": msg} if {
 	some doc in input.documents
 	some r in adrlib.refs(doc)
 	not r.target in numbers_present
 	msg := sprintf("%s ADR-%03d, which does not exist", [r.kind, r.target])
 }
 
-deny contains {"rule": "ADR010", "path": doc.path, "line": r.line, "message": msg} if {
+deny contains {"rule": "reference-direction", "path": doc.path, "line": r.line, "message": msg} if {
 	some doc in input.documents
 	some r in adrlib.refs(doc)
 	r.target <= adrlib.number(doc)
 	msg := sprintf("%s ADR-%03d must point to a later ADR", [r.kind, r.target])
 }
 
-deny contains {"rule": "ADR011", "path": d.path, "line": 1, "message": msg} if {
+deny contains {"rule": "duplicate-number", "path": d.path, "line": 1, "message": msg} if {
 	some d in numbered
 	count([x | some x in numbered; x.number == d.number]) > 1
 	msg := sprintf("ADR number %03d is used by more than one file", [d.number])
 }
 
-deny contains {"rule": "ADR012", "path": d.path, "line": 1, "message": msg} if {
+deny contains {"rule": "number-sequence", "path": d.path, "line": 1, "message": msg} if {
 	count(numbers_present) > 0
 	some n in numbers.range(1, max(numbers_present))
 	not n in numbers_present
@@ -45,14 +45,14 @@ deny contains {"rule": "ADR012", "path": d.path, "line": 1, "message": msg} if {
 	msg := sprintf("ADR number %03d is missing; numbers run from 001 without gaps", [n])
 }
 
-deny contains {"rule": "ADR012", "path": d.path, "line": 1, "message": msg} if {
+deny contains {"rule": "number-sequence", "path": d.path, "line": 1, "message": msg} if {
 	msg := "ADR number 000 is not used; numbers run from 001"
 	some d in numbered
 	d.number == 0
 }
 
 # Reported on each reference whose target leads back to this ADR.
-deny contains {"rule": "ADR013", "path": doc.path, "line": r.line, "message": msg} if {
+deny contains {"rule": "replacement-cycle", "path": doc.path, "line": r.line, "message": msg} if {
 	msg := "this ADR is in a cycle of replacements"
 	some doc in input.documents
 	some r in adrlib.refs(doc)
