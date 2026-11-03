@@ -3,3 +3,8 @@ policy: .regomark/policy
 entrypoint: adr
 skip_rules: []
 exclude: []
+# How regomark check --judge (or REGOMARK_JUDGE=on) asks the questions about
+# what an ADR says. Nothing is asked unless the user turns judging on, and the
+# workflow does not.
+judge:
+  command: [sh, -c, 'claude -p --output-format json --model sonnet --tools "" --json-schema "$REGOMARK_ANSWER_SCHEMA"']
