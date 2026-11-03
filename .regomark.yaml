@@ -1,0 +1,5 @@
+documents: docs/adr
+policy: .regomark/policy
+entrypoint: adr
+skip_rules: []
+exclude: []

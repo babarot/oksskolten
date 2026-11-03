@@ -1,0 +1,34 @@
+name: ADR
+
+# Checks docs/adr against the shared ADR rule with regomark. It runs on every
+# pull request, not only on those that touch docs/adr: renaming a test or a
+# package can break a link in an ADR without touching the ADR.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions: {}
+
+jobs:
+  regomark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Only mise itself; the repository's own tools are not needed here
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: 2026.9.18
+          install: false
+      - name: Check the ADRs
+        run: mise x github:babarot/regomark@0.1.1 -- regomark check --format github
+        env:
+          # mise-action does not pass its token on, and unauthenticated
+          # GitHub API calls hit the rate limit on shared runners
+          MISE_GITHUB_TOKEN: ${{ github.token }}
