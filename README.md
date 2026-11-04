@@ -210,6 +210,10 @@ docker compose -f compose.yaml -f compose.prod.yaml up --build -d
 
 The production compose file includes a `cloudflared` sidecar that exposes the app via Cloudflare Tunnel — no port forwarding or static IP required.
 
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Oksskolten/)
+
 ## License
 
 [AGPL-3.0](LICENSE)
