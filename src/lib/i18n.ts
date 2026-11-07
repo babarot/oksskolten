@@ -229,6 +229,9 @@ const dict = {
   'settings.save': { ja: '変更を保存', en: 'Save changes', zh: '保存更改'},
   'settings.saving': { ja: '保存中...', en: 'Saving...', zh: '保存中...'},
   'settings.saved': { ja: '保存しました', en: 'Saved', zh: '已保存'},
+  'settings.enabled': { ja: '有効', en: 'Enabled', zh: '已启用'},
+  'settings.disabled': { ja: '無効', en: 'Disabled', zh: '已禁用'},
+  'settings.copy': { ja: 'コピー', en: 'Copy', zh: '复制'},
 
   // Reading
   'settings.imageStorage': { ja: '画像保存', en: 'Image Storage', zh: '图片存储'},
@@ -581,6 +584,19 @@ const dict = {
   'settings.tokenDelete': { ja: '削除', en: 'Delete', zh: '删除'},
   'settings.tokenLastUsed': { ja: '最終使用:', en: 'Last used:', zh: '上次使用：'},
   'settings.noTokens': { ja: 'APIトークンはまだありません', en: 'No API tokens yet', zh: '暂无 API 令牌'},
+
+  // Settings — Fever API
+  'settings.feverApi': { ja: 'Fever API', en: 'Fever API', zh: 'Fever API'},
+  'settings.feverApiDesc': { ja: 'Reeder、ReadKit、Unread などのFever対応RSSクライアントから同期できるようにします', en: 'Allow Fever-compatible RSS clients such as Reeder, ReadKit, and Unread to sync with this server', zh: '允许 Reeder、ReadKit、Unread 等兼容 Fever 的 RSS 客户端与此服务器同步'},
+  'settings.feverUsername': { ja: 'ユーザー名', en: 'Username', zh: '用户名'},
+  'settings.feverPassword': { ja: 'パスワード', en: 'Password', zh: '密码'},
+  'settings.feverEndpoint': { ja: 'エンドポイント', en: 'Endpoint', zh: '端点'},
+  'settings.feverPasswordPlaceholder': { ja: 'クライアント用パスワード', en: 'Client password', zh: '客户端密码'},
+  'settings.feverPasswordPlaceholderConfigured': { ja: '変更する場合のみ入力', en: 'Enter only to change', zh: '仅在更改时填写'},
+  'settings.feverCredentialsRequired': { ja: 'Fever APIを有効にするにはユーザー名とパスワードが必要です', en: 'Username and password are required to enable Fever API', zh: '启用 Fever API 需要用户名和密码'},
+  'settings.feverPasswordRequired': { ja: 'ユーザー名を変更するにはパスワードも入力してください', en: 'Enter a password when changing the username', zh: '更改用户名时也需要输入密码'},
+  'settings.feverSaved': { ja: 'Fever API設定を保存しました', en: 'Fever API settings saved', zh: 'Fever API 设置已保存'},
+  'settings.feverSaveFailed': { ja: 'Fever API設定の保存に失敗しました', en: 'Failed to save Fever API settings', zh: '保存 Fever API 设置失败'},
 
   // Settings — email change
   'settings.changeEmail': { ja: 'メールアドレス変更', en: 'Change Email', zh: '更改邮箱'},

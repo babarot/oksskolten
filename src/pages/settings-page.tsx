@@ -7,6 +7,7 @@ import { PasswordSettings } from '../components/settings/password-settings'
 import { PasskeySettings } from '../components/settings/passkey-settings'
 import { GitHubOAuthSettings } from '../components/settings/github-oauth-settings'
 import { ApiTokenSettings } from '../components/settings/api-token-settings'
+import { FeverSettings } from '../components/settings/fever-settings'
 import { ImageStorageSettings } from '../components/settings/image-storage-settings'
 import { GeneralTab } from './settings/general-tab'
 const AppearanceTab = lazy(() => import('./settings/appearance-tab').then(m => ({ default: m.AppearanceTab })))
@@ -99,6 +100,8 @@ export function SettingsPage() {
               <PasskeySettings />
               <Separator />
               <GitHubOAuthSettings />
+              <Separator />
+              <FeverSettings />
               <Separator />
               <ApiTokenSettings />
             </>

@@ -282,6 +282,23 @@ export function markArticlesSeen(ids: number[]): { updated: number } {
   return { updated: result.changes }
 }
 
+export function markArticlesUnseen(ids: number[]): { updated: number } {
+  if (ids.length === 0) return { updated: 0 }
+  const placeholders = ids.map(() => '?').join(',')
+  const result = getDb().transaction(() => {
+    const update = getDb().prepare(
+      `UPDATE articles SET seen_at = NULL, read_at = NULL WHERE id IN (${placeholders}) AND seen_at IS NOT NULL`,
+    ).run(...ids)
+    for (const id of ids) updateScoreDb(id)
+    return update
+  })()
+  if (result.changes > 0) {
+    for (const id of ids) syncScoreToSearch(id)
+    syncArticleFiltersToSearch(ids.map(id => ({ id, is_unread: true })))
+  }
+  return { updated: result.changes }
+}
+
 export function markAllSeenByFeed(feedId: number): { updated: number } {
   // Collect affected IDs before update for search sync
   const affectedIds = (getDb().prepare(
