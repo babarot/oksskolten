@@ -264,6 +264,27 @@ describe('Articles', () => {
     expect(article!.url).toBe('https://example.com/https-article')
   })
 
+  // #102: consecutive slashes — the browser collapses // before the frontend/API sees it.
+  // DB stores canonical (single-slash) URLs (insertArticle normalizes + migration cleans legacy),
+  // so lookup with a collapsed form must still match.
+  it('getArticleByUrl matches an article when the lookup has consecutive slashes', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/kiji/horai' })
+
+    const article = getArticleByUrl('https://example.com//kiji/horai')
+    expect(article).toBeDefined()
+  })
+
+  // #116: percent-encoding case — lookup may arrive with lowercase hex while the DB stores
+  // canonical uppercase hex (new URL().href uppercases it; migration cleans legacy rows).
+  it('getArticleByUrl matches an article when the lookup uses lowercase percent-hex', () => {
+    const feed = seedFeed()
+    seedArticle(feed.id, { url: 'https://example.com/%E8%A8%98%E4%BA%8B' })
+
+    const article = getArticleByUrl('https://example.com/%e8%a8%98%e4%ba%8b')
+    expect(article).toBeDefined()
+  })
+
 
   describe('getArticles filtering', () => {
     it('filters by feedId', () => {

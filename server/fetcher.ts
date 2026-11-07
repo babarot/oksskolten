@@ -7,7 +7,6 @@ import {
   getRetryStats,
   insertArticle,
   markArticleRefreshAttempted,
-  normalizeUrl,
   updateArticleContent,
   updateFeedError,
   updateFeedRateLimit,
@@ -16,6 +15,7 @@ import {
   type Feed,
   type Article,
 } from './db.js'
+import { normalizeUrl } from '../shared/url.js'
 
 import { Semaphore, CONCURRENCY, errorMessage } from './fetcher/util.js'
 import { detectAndStoreSimilarArticles } from './similarity.js'

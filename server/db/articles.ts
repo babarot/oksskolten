@@ -1,4 +1,5 @@
 import { getDb, runNamed, getNamed, allNamed } from './connection.js'
+import { normalizeUrl } from '../../shared/url.js'
 import type { Article, ArticleListItem, ArticleDetail } from './types.js'
 import type { MeiliArticleDoc } from '../search/client.js'
 import { syncArticleToSearch, deleteArticleFromSearch, deleteArticlesFromSearch, syncArticleScoreToSearch, syncArticleFiltersToSearch } from '../search/sync.js'
@@ -7,11 +8,6 @@ import { deleteArticleImages } from '../fetcher/article-images.js'
 import { logger } from '../logger.js'
 
 const log = logger.child('retention')
-
-/** Normalize a URL so that raw-Unicode and percent-encoded forms compare equal. */
-export function normalizeUrl(raw: string): string {
-  try { return new URL(raw).href } catch { return raw }
-}
 
 function buildMeiliDoc(id: number): MeiliArticleDoc | null {
   const row = getDb().prepare(`
@@ -377,7 +373,7 @@ export function insertArticle(data: {
   `, {
     feed_id: data.feed_id,
     title: data.title,
-    url: data.url,
+    url: normalizeUrl(data.url),
     published_at: data.published_at,
     lang: data.lang ?? null,
     full_text: data.full_text ?? null,
