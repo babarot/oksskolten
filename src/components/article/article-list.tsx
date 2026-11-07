@@ -44,7 +44,12 @@ export interface ArticleListHandle {
   revalidate: () => void
 }
 
-export const ArticleList = forwardRef<ArticleListHandle, object>(function ArticleList(_props, ref) {
+interface ArticleListProps {
+  onSplitOpen?: (url: string) => void
+  selectedUrl?: string | null
+}
+
+export const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(function ArticleList({ onSplitOpen, selectedUrl }, ref) {
   const location = useLocation()
   const navigate = useNavigate()
   const { feedId: feedIdParam, categoryId: categoryIdParam } = useParams<{ feedId?: string; categoryId?: string }>()
@@ -146,6 +151,10 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   }, [articles])
 
   const isOverlayMode = articleOpenMode === 'overlay'
+  // Only treat as split when the parent actually mounts the detail panel
+  // (desktop). On narrow viewports the preference stays "split" but the list
+  // falls back to full-page navigation — onSplitOpen is not provided.
+  const isSplitMode = articleOpenMode === 'split' && !!onSplitOpen
   // Short debounce after overlay close to prevent Escape from immediately clearing focus
   const escapeDebounceRef = useRef(false)
 
@@ -161,9 +170,14 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
         const article = articleMap.get(id)
         if (article) setOverlayUrl(article.url)
       }
+      // Split mode: open article in the right-hand detail panel on j/k
+      if (isSplitMode && onSplitOpen) {
+        const article = articleMap.get(id)
+        if (article) onSplitOpen(article.url)
+      }
     },
-    onEnter: isOverlayMode ? undefined : (id) => {
-      // Page mode: Enter to navigate
+    onEnter: (isOverlayMode || isSplitMode) ? undefined : (id) => {
+      // Page mode (and split preference on mobile): Enter to navigate
       const article = articleMap.get(id)
       if (article) {
         void navigate(articleUrlToPath(article.url))
@@ -406,7 +420,7 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
   }, [feedId, categoryId, setFocusedItemId])
 
   return (
-    <main ref={listRef} className="max-w-2xl mx-auto" role={!isGridLayout ? 'listbox' : undefined}>
+    <main ref={listRef} className={isSplitMode ? '' : 'max-w-2xl mx-auto'} role={!isGridLayout ? 'listbox' : undefined}>
       {isTouchDevice && <PullToRefresh onRefresh={async () => {
         if (feedId) {
           const result = await startFeedFetch(feedId)
@@ -481,27 +495,37 @@ export const ArticleList = forwardRef<ArticleListHandle, object>(function Articl
           const effectiveArticle = isAutoRead
             ? { ...article, seen_at: article.seen_at ?? new Date().toISOString() }
             : article
-          const handleOverlayOpen = articleOpenMode === 'overlay' ? (e: React.MouseEvent<HTMLAnchorElement>) => {
-            if (e.metaKey || e.ctrlKey || e.button === 1) return
-            e.preventDefault()
-            setOverlayUrl(article.url)
-          } : undefined
+          const handleListOpen =
+            isOverlayMode
+              ? (e: React.MouseEvent<HTMLAnchorElement>) => {
+                  if (e.metaKey || e.ctrlKey || e.button === 1) return
+                  e.preventDefault()
+                  setOverlayUrl(article.url)
+                }
+              : isSplitMode && onSplitOpen
+                ? (e: React.MouseEvent<HTMLAnchorElement>) => {
+                    if (e.metaKey || e.ctrlKey || e.button === 1) return
+                    e.preventDefault()
+                    onSplitOpen(article.url)
+                  }
+                : undefined
           const cardProps = {
             article: effectiveArticle,
             layout,
             isFeatured: layout === 'magazine' && index === 0,
-            onClick: handleOverlayOpen,
+            onClick: handleListOpen,
             ...displayConfig,
           }
           const isKbFocused = focusedItemId === String(article.id)
+          const isSplitSelected = isSplitMode && selectedUrl === article.url
           return (
             <div
               key={article.id}
               data-article-id={article.id}
               data-article-unread={article.seen_at == null && !isAutoRead ? '1' : '0'}
-              aria-selected={isKbFocused || undefined}
+              aria-selected={isKbFocused || isSplitSelected || undefined}
               className={layout === 'magazine' && index === 0 ? 'col-span-full' : ''}
-              style={isKbFocused ? {
+              style={(isKbFocused || isSplitSelected) ? {
                 borderLeft: '2px solid var(--color-accent)',
                 backgroundColor: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
               } : undefined}
