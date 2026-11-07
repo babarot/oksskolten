@@ -92,9 +92,9 @@ const dict = {
     zh: '此站点受机器人检测（如 Cloudflare）保护，绕过失败。请稍等片刻后尝试「重试获取」。'
   },
   'feedError.httpError': {
-    ja: 'サーバーからHTTPエラー（{{code}}）が返されました。サイトが一時的にダウンしているか、URLが変更された可能性があります。',
-    en: 'The server returned HTTP error ({{code}}). The site may be temporarily down or the URL may have changed.',
-    zh: '服务器返回 HTTP 错误（{{code}}）。站点可能暂时不可用或 URL 已更改。'
+    ja: 'サーバーからHTTPエラー（${code}）が返されました。サイトが一時的にダウンしているか、URLが変更された可能性があります。',
+    en: 'The server returned HTTP error (${code}). The site may be temporarily down or the URL may have changed.',
+    zh: '服务器返回 HTTP 错误（${code}）。站点可能暂时不可用或 URL 已更改。'
   },
   'feedError.parseFailed': {
     ja: 'フィードのXMLを解析できませんでした。フィードの形式が壊れているか、RSS/Atom形式でない可能性があります。「RSSを再検出」で別のフィードソースを探すことができます。',
