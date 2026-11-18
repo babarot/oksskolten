@@ -175,6 +175,28 @@ describe('fetchAndParseRss', () => {
     expect(items[1].title).toBe('Second Post')
   })
 
+  it('uses <content:encoded> as the RSS excerpt', async () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel><title>T</title>
+    <item>
+      <title>Post</title>
+      <link>https://example.com/post</link>
+      <description>Short summary</description>
+      <content:encoded><![CDATA[<p>Full article body</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>`
+    mockSafeFetch.mockResolvedValue(mockResponse(xml))
+
+    const { items } = await fetchAndParseRss({
+      id: 1, name: 'test', url: 'https://example.com',
+      rss_url: 'https://example.com/rss',
+    } as any)
+
+    expect(items[0].excerpt).toBe('<p>Full article body</p>')
+  })
+
   it('parses Atom feed', async () => {
     mockSafeFetch.mockResolvedValue(mockResponse(ATOM_XML))
 
