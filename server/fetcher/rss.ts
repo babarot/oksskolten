@@ -289,7 +289,8 @@ async function parseRssXml(xml: string): Promise<RssItem[]> {
               url = alt?.href || links[0]?.href
             }
           }
-          const rawExcerpt = item.content_encoded || item['content:encoded'] || item.content || item.description || item.summary
+          // feedsmith puts <content:encoded> in item.content.encoded
+          const rawExcerpt = item.content_encoded || item['content:encoded'] || (item.content as { encoded?: string } | undefined)?.encoded || item.content || item.description || item.summary
           const excerpt = typeof rawExcerpt === 'string' ? rawExcerpt : (rawExcerpt && typeof rawExcerpt === 'object' && 'value' in rawExcerpt ? String((rawExcerpt as Record<string, unknown>).value) : undefined)
           return {
             title: (item.title as string) || 'Untitled',
